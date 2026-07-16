@@ -24,3 +24,6 @@ tensorflow
 numpy
 opencv-python
 
+Addtional files******************************************************************************************
+
+google drive - https://drive.google.com/drive/folders/1xUDl16n6Bq5pJ-bu0uQsYf1g5W069Z44?usp=drive_link
