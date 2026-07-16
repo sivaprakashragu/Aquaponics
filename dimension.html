@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D Models | The Living Lab</title>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;400;500;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: { extend: {
+        colors: { primary: "#00daf3", surface: "#0a0f14" },
+        fontFamily: { headline: ["Manrope"], mono: ["JetBrains Mono"] }
+      }}
+    };
+  </script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0a0f14; color: #dde3ec; font-family: 'Manrope', sans-serif; overflow: hidden; }
+    body::before {
+      content: ''; position: fixed; inset: 0;
+      background-image:
+        linear-gradient(rgba(0,218,243,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,218,243,0.03) 1px, transparent 1px);
+      background-size: 40px 40px; pointer-events: none; z-index: 0;
+    }
+
+    /* ── SIDEBAR ── */
+    .sidebar { width:220px; background:#0d1319; border-right:1px solid #1e2830; flex-shrink:0; }
+    .nav-item { display:flex; align-items:center; gap:10px; padding:12px 20px; color:#5a6a7a; font-size:13px; font-weight:500; cursor:pointer; transition:all 0.2s; border-left:2px solid transparent; text-decoration:none; }
+    .nav-item:hover  { color:#00daf3; background:rgba(0,218,243,0.05); }
+    .nav-item.active { color:#00daf3; border-left-color:#00daf3; background:rgba(0,218,243,0.07); }
+    .nav-icon { font-size:16px; width:20px; text-align:center; }
+    .pulse-dot { width:8px; height:8px; border-radius:50%; background:#6ce000; animation:pulseDot 2s infinite; }
+    @keyframes pulseDot { 0%,100%{box-shadow:0 0 0 0 rgba(108,224,0,0.4)} 50%{box-shadow:0 0 0 6px rgba(108,224,0,0)} }
+
+    .stat-card { background:#111820; border:1px solid #1e2830; border-radius:14px; padding:20px; }
+    .badge { font-size:10px; padding:2px 8px; border-radius:20px; font-family:'JetBrains Mono',monospace; letter-spacing:0.05em; text-transform:uppercase; }
+    .badge-ok   { background:rgba(108,224,0,0.1);  color:#6ce000; }
+    .badge-cyan { background:rgba(0,218,243,0.1);  color:#00daf3; }
+    .badge-warn { background:rgba(245,158,11,0.1); color:#f59e0b; }
+
+    ::-webkit-scrollbar { width:4px; }
+    ::-webkit-scrollbar-track { background:transparent; }
+    ::-webkit-scrollbar-thumb { background:#1e2830; border-radius:2px; }
+
+    @keyframes fadeInUp { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
+    .anim-in { animation:fadeInUp 0.45s ease both; }
+
+    /* ══════════════ GALLERY VIEW ══════════════ */
+    #galleryView {
+      flex:1; overflow-y:auto; padding:32px 40px;
+    }
+
+    /* Model card */
+    .model-card {
+      background: #111820;
+      border: 1px solid #1e2830;
+      border-radius: 18px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: all 0.3s;
+      position: relative;
+    }
+    .model-card:hover {
+      border-color: rgba(0,218,243,0.35);
+      transform: translateY(-4px);
+      box-shadow: 0 12px 40px rgba(0,218,243,0.1), 0 0 0 1px rgba(0,218,243,0.1);
+    }
+    .model-card:hover .card-preview-glow { opacity: 1; }
+    .model-card:hover .open-label { opacity: 1; transform: translateY(0); }
+
+    /* Preview area — mini Three.js canvas */
+    .card-preview {
+      position: relative;
+      height: 220px;
+      background: radial-gradient(ellipse at 50% 40%, #0a1a2e 0%, #060c14 100%);
+      overflow: hidden;
+    }
+    .card-preview canvas {
+      width: 100% !important;
+      height: 100% !important;
+      display: block;
+    }
+    .card-preview-glow {
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse at 50% 50%, rgba(0,218,243,0.06) 0%, transparent 70%);
+      opacity: 0; transition: opacity 0.3s; pointer-events: none;
+    }
+    .card-preview-scan {
+      position: absolute; left:0; right:0; height:1px;
+      background: linear-gradient(90deg, transparent, rgba(0,218,243,0.3), transparent);
+      animation: scanMove 4s linear infinite;
+      pointer-events: none;
+    }
+    @keyframes scanMove { 0%{top:0;opacity:0} 5%{opacity:1} 90%{opacity:0.3} 100%{top:100%;opacity:0} }
+
+    /* Open label overlay */
+    .open-label {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(10,15,20,0.55);
+      backdrop-filter: blur(4px);
+      opacity: 0; transition: all 0.25s;
+      transform: translateY(6px);
+    }
+    .open-label-inner {
+      background: linear-gradient(135deg, #00daf3, #0077ff);
+      color: #0a0f14; font-weight: 800; font-size: 13px;
+      padding: 10px 26px; border-radius: 10px;
+      box-shadow: 0 0 24px rgba(0,218,243,0.4);
+    }
+
+    /* Preview loading spinner */
+    .preview-loading {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 10px;
+    }
+    .preview-spinner {
+      width: 40px; height: 40px; border-radius: 12px;
+      background: linear-gradient(135deg, #001a2a, #003040);
+      border: 1px solid rgba(0,218,243,0.3);
+      display: flex; align-items: center; justify-content: center; font-size: 18px;
+      animation: spin3dCard 2s linear infinite;
+    }
+    @keyframes spin3dCard { to { transform: rotateY(360deg); } }
+
+    /* Card info section */
+    .card-info { padding: 18px 20px; }
+    .card-tag {
+      display: inline-block; font-size: 9px; padding: 2px 8px;
+      border-radius: 20px; font-family: 'JetBrains Mono', monospace;
+      letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 8px;
+    }
+    .card-title { font-size: 15px; font-weight: 800; color: #dde3ec; margin-bottom: 4px; }
+    .card-sub   { font-size: 11px; color: #5a6a7a; margin-bottom: 12px; font-family: 'JetBrains Mono', monospace; }
+    .card-meta  { display: flex; flex-direction: column; gap: 4px; }
+    .card-meta-row { display: flex; justify-content: space-between; }
+    .card-meta-row span:first-child { font-size: 10px; color: #3a4a5a; }
+    .card-meta-row span:last-child  { font-size: 10px; color: #dde3ec; font-family: 'JetBrains Mono', monospace; }
+
+    .card-open-btn {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      margin-top: 14px; padding: 9px 0;
+      background: linear-gradient(135deg, rgba(0,218,243,0.1), rgba(0,119,255,0.1));
+      border: 1px solid rgba(0,218,243,0.2);
+      border-radius: 10px; color: #00daf3;
+      font-size: 12px; font-weight: 700; font-family: 'JetBrains Mono', monospace;
+      letter-spacing: 0.05em; transition: all 0.2s;
+    }
+    .model-card:hover .card-open-btn {
+      background: linear-gradient(135deg, rgba(0,218,243,0.18), rgba(0,119,255,0.15));
+      border-color: #00daf3;
+    }
+
+    /* ══════════════ 3D VIEWER VIEW ══════════════ */
+    #viewerView { flex:1; display:none; flex-direction:column; overflow:hidden; position:relative; }
+
+    /* Back button */
+    #backBtn {
+      position: absolute; top: 20px; left: 20px; z-index: 30;
+      background: rgba(13,19,25,0.9); backdrop-filter: blur(14px);
+      border: 1px solid rgba(0,218,243,0.25); border-radius: 10px;
+      padding: 9px 16px; color: #00daf3;
+      font-size: 11px; font-family: 'JetBrains Mono', monospace;
+      letter-spacing: 0.05em; cursor: pointer;
+      display: flex; align-items: center; gap: 7px;
+      transition: all 0.2s;
+    }
+    #backBtn:hover { background: rgba(0,218,243,0.12); border-color: #00daf3; }
+
+    #viewerWrap {
+      position: relative; flex: 1;
+      background: radial-gradient(ellipse at 50% 30%, #0a1a2e 0%, #0a0f14 70%);
+      overflow: hidden;
+    }
+    #viewerWrap::after {
+      content: ''; position: absolute; inset: 0;
+      background: radial-gradient(ellipse at 50% 50%, transparent 40%, rgba(10,15,20,0.6) 100%);
+      pointer-events: none; z-index: 2;
+    }
+
+    .corner-glow { position:absolute; width:300px; height:300px; border-radius:50%; pointer-events:none; z-index:1; }
+    .corner-glow.tl { top:-100px; left:-100px; background:radial-gradient(circle, rgba(0,218,243,0.07) 0%, transparent 70%); }
+    .corner-glow.br { bottom:-100px; right:-100px; background:radial-gradient(circle, rgba(108,224,0,0.05) 0%, transparent 70%); }
+
+    #scanLine {
+      position:absolute; left:0; right:0; height:2px;
+      background:linear-gradient(90deg, transparent, rgba(0,218,243,0.4), transparent);
+      pointer-events:none; z-index:3;
+      animation: scanMove 5s linear infinite;
+    }
+
+    #threeCanvas { display:block; width:100%!important; height:100%!important; }
+
+    /* HUD */
+    .hud-panel {
+      position:absolute; background:rgba(13,19,25,0.82); backdrop-filter:blur(14px);
+      border:1px solid rgba(0,218,243,0.12); border-radius:14px; padding:14px 16px;
+      z-index:10; pointer-events:none;
+    }
+    #hudInfo     { top:20px; left:20px; min-width:180px; }
+    #hudControls { top:20px; right:20px; text-align:right; }
+    #hudStats    { bottom:20px; left:50%; transform:translateX(-50%); display:flex; gap:24px; align-items:center; padding:12px 24px; white-space:nowrap; }
+    .stat-divider { width:1px; height:28px; background:#1e2830; }
+
+    #hudButtons { position:absolute; bottom:20px; left:20px; display:flex; flex-direction:column; gap:8px; z-index:10; }
+    .hud-btn {
+      background:rgba(13,19,25,0.85); backdrop-filter:blur(10px);
+      border:1px solid rgba(0,218,243,0.2); border-radius:10px;
+      padding:8px 14px; color:#00daf3; font-size:11px;
+      font-family:'JetBrains Mono',monospace; letter-spacing:0.05em;
+      cursor:pointer; transition:all 0.2s;
+      display:flex; align-items:center; gap:7px;
+      pointer-events:all; outline:none;
+    }
+    .hud-btn:hover  { background:rgba(0,218,243,0.12); border-color:#00daf3; }
+    .hud-btn.active { background:rgba(0,218,243,0.18); border-color:#00daf3; color:#fff; }
+
+    /* Loading screen */
+    #loadScreen {
+      position:absolute; inset:0; background:#0a0f14;
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      gap:20px; z-index:100; transition:opacity 0.6s ease;
+    }
+    #loadScreen.hidden { opacity:0; pointer-events:none; }
+    .load-bar-track { width:280px; height:3px; background:#1e2830; border-radius:2px; overflow:hidden; }
+    .load-bar-fill  { height:100%; background:linear-gradient(90deg,#00daf3,#6ce000); border-radius:2px; transition:width 0.3s ease; }
+    .model-spinner  {
+      width:60px; height:60px; border-radius:16px;
+      background:linear-gradient(135deg,#001a2a,#003040);
+      border:1px solid rgba(0,218,243,0.3);
+      display:flex; align-items:center; justify-content:center; font-size:28px;
+      animation:spin3d 2s linear infinite; box-shadow:0 0 30px rgba(0,218,243,0.2);
+    }
+    @keyframes spin3d { to { transform:rotateY(360deg); } }
+  </style>
+</head>
+<body class="flex overflow-hidden h-screen" style="position:relative;z-index:1;">
+
+  <!-- ══════════════ SIDEBAR ══════════════ -->
+  <aside class="sidebar flex flex-col h-screen" style="z-index:10;position:relative;">
+    <div class="px-5 py-6" style="border-bottom:1px solid #1e2830;">
+      <div class="flex items-center gap-3 mb-1">
+        <div style="width:28px;height:28px;background:linear-gradient(135deg,#00daf3,#0077ff);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#0a0f14;">L</div>
+        <span class="font-bold text-sm" style="color:#dde3ec;">Living Lab</span>
+      </div>
+      <p class="text-xs ml-10" style="color:#3a4a5a;font-family:'JetBrains Mono',monospace;">AQ-SYS v2.4</p>
+    </div>
+    <div class="px-5 py-4" style="border-bottom:1px solid #1e2830;">
+      <div class="flex items-center gap-2">
+        <div class="pulse-dot"></div>
+        <span style="font-size:11px;color:#6ce000;font-family:'JetBrains Mono',monospace;letter-spacing:0.05em;">ALL SENSORS ONLINE</span>
+      </div>
+    </div>
+    <nav class="flex-1 py-4">
+      <div class="px-5 mb-3" style="font-size:10px;color:#3a4a5a;letter-spacing:0.1em;font-family:'JetBrains Mono',monospace;">NAVIGATION</div>
+      <a href="/"  class="nav-item"><span class="nav-icon">◈</span> Dashboard</a>
+      <a href="/list"       class="nav-item"><span class="nav-icon">⊞</span> Fish Inventory</a>
+      <a href="/disease"    class="nav-item"><span class="nav-icon">⬡</span> Disease Analysis</a>
+      <a href="/aquaponics" class="nav-item"><span class="nav-icon">◎</span> Aquaponics</a>
+      <a href="/chatbot"    class="nav-item"><span class="nav-icon">◬</span> AI Assistant</a>
+      <a href="/dimension"  class="nav-item active"><span class="nav-icon">◭</span> 3D Models</a>
+    </nav>
+    <div class="px-5 py-4" style="border-top:1px solid #1e2830;">
+      <div class="stat-card" style="padding:12px;">
+        <div class="flex justify-between items-center mb-1">
+          <span style="font-size:11px;color:#5a6a7a;">Models</span>
+          <span class="badge badge-cyan" id="sidebarModelCount">2 GLB</span>
+        </div>
+        <p class="font-bold" style="color:#00daf3;font-size:12px;">3D Gallery</span></p>
+        <p style="font-size:10px;color:#5a6a7a;margin-top:2px;">Meshy AI · Three.js r128</p>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ══════════════ MAIN ══════════════ -->
+  <div class="flex-1 flex flex-col overflow-hidden" style="position:relative;z-index:1;">
+
+    <!-- Header -->
+    <header class="flex justify-between items-center px-8 h-14 flex-shrink-0" style="border-bottom:1px solid #1e2830;background:rgba(10,15,20,0.9);backdrop-filter:blur(20px);z-index:20;position:relative;">
+      <div>
+        <h1 class="font-bold text-sm" style="color:#dde3ec;" id="headerTitle">3D Model Gallery</h1>
+        <p style="font-size:11px;color:#3a4a5a;font-family:'JetBrains Mono',monospace;" id="headerSub">Select a model to open the 3D viewer</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <span class="badge" id="fpsBadge" style="background:rgba(0,218,243,0.08);color:#5a6a7a;font-family:'JetBrains Mono',monospace;display:none;">-- FPS</span>
+        <span class="badge badge-ok" id="rendererBadge" style="display:none;">RENDERER ACTIVE</span>
+        <span class="badge badge-cyan">THREE.js r128</span>
+        <span class="badge models-count-badge" style="background:rgba(108,224,0,0.1);color:#6ce000;">2 MODELS</span>
+      </div>
+    </header>
+
+    <!-- ══════════════ GALLERY VIEW ══════════════ -->
+    <div id="galleryView" class="anim-in">
+
+      <div style="margin-bottom:28px;">
+        <p style="font-size:10px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;letter-spacing:0.12em;margin-bottom:6px;">◭ 3D MODEL LIBRARY</p>
+        <h2 style="font-size:20px;font-weight:800;color:#dde3ec;">Choose a model to explore</h2>
+        <p style="font-size:12px;color:#5a6a7a;margin-top:4px;">Interactive 3D models generated with Meshy AI · drag · zoom · rotate</p>
+      </div>
+
+      <!-- Cards grid — auto-generated by JS from MODELS array -->
+      <div id="cardsGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;"></div>
+
+    </div>
+
+    <!-- ══════════════ 3D VIEWER VIEW ══════════════ -->
+    <div id="viewerView">
+
+      <!-- Back button -->
+      <button id="backBtn" onclick="closeViewer()">← Back to Gallery</button>
+
+      <!-- Viewer -->
+      <div id="viewerWrap" class="flex-1" style="display:flex;flex-direction:column;">
+        <div class="corner-glow tl"></div>
+        <div class="corner-glow br"></div>
+        <div id="scanLine"></div>
+
+        <canvas id="threeCanvas"></canvas>
+
+        <!-- HUD: Top-left info -->
+        <div class="hud-panel anim-in" id="hudInfo">
+          <p style="font-size:9px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;letter-spacing:0.12em;margin-bottom:8px;">◭ MODEL INFO</p>
+          <p style="font-size:13px;font-weight:700;color:#dde3ec;margin-bottom:4px;" id="hudModelName">—</p>
+          <p style="font-size:10px;color:#5a6a7a;margin-bottom:10px;">Meshy AI · GLB format</p>
+          <div style="display:flex;flex-direction:column;gap:5px;">
+            <div style="display:flex;justify-content:space-between;gap:20px;">
+              <span style="font-size:10px;color:#5a6a7a;">Format</span>
+              <span style="font-size:10px;color:#00daf3;font-family:'JetBrains Mono',monospace;">GLB / glTF 2.0</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;gap:20px;">
+              <span style="font-size:10px;color:#5a6a7a;">Meshes</span>
+              <span style="font-size:10px;color:#dde3ec;font-family:'JetBrains Mono',monospace;" id="meshCount">—</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;gap:20px;">
+              <span style="font-size:10px;color:#5a6a7a;">Triangles</span>
+              <span style="font-size:10px;color:#dde3ec;font-family:'JetBrains Mono',monospace;" id="triCount">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- HUD: Top-right controls -->
+        <div class="hud-panel anim-in" id="hudControls" style="top:20px;right:20px;text-align:right;animation-delay:0.1s;">
+          <p style="font-size:9px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;letter-spacing:0.12em;margin-bottom:8px;text-align:right;">CONTROLS</p>
+          <div style="display:flex;flex-direction:column;gap:4px;">
+            <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;">
+              <span style="font-size:10px;color:#5a6a7a;">Rotate</span>
+              <span style="font-size:10px;color:#00daf3;font-family:'JetBrains Mono',monospace;background:rgba(0,218,243,0.08);padding:2px 7px;border-radius:4px;border:1px solid rgba(0,218,243,0.15);">Left drag</span>
+            </div>
+            <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;">
+              <span style="font-size:10px;color:#5a6a7a;">Zoom</span>
+              <span style="font-size:10px;color:#00daf3;font-family:'JetBrains Mono',monospace;background:rgba(0,218,243,0.08);padding:2px 7px;border-radius:4px;border:1px solid rgba(0,218,243,0.15);">Scroll</span>
+            </div>
+            <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;">
+              <span style="font-size:10px;color:#5a6a7a;">Pan</span>
+              <span style="font-size:10px;color:#00daf3;font-family:'JetBrains Mono',monospace;background:rgba(0,218,243,0.08);padding:2px 7px;border-radius:4px;border:1px solid rgba(0,218,243,0.15);">Right drag</span>
+            </div>
+            <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;">
+              <span style="font-size:10px;color:#5a6a7a;">Reset</span>
+              <span style="font-size:10px;color:#00daf3;font-family:'JetBrains Mono',monospace;background:rgba(0,218,243,0.08);padding:2px 7px;border-radius:4px;border:1px solid rgba(0,218,243,0.15);">Double-click</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- HUD: Bottom stats -->
+        <div class="hud-panel anim-in" id="hudStats" style="bottom:20px;left:50%;transform:translateX(-50%);display:flex;gap:24px;align-items:center;padding:12px 24px;white-space:nowrap;animation-delay:0.2s;">
+          <div style="text-align:center;">
+            <p style="font-size:9px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;letter-spacing:0.08em;">ROTATION X</p>
+            <p style="font-size:13px;font-weight:700;color:#00daf3;font-family:'JetBrains Mono',monospace;" id="rotX">0.0°</p>
+          </div>
+          <div class="stat-divider"></div>
+          <div style="text-align:center;">
+            <p style="font-size:9px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;letter-spacing:0.08em;">ROTATION Y</p>
+            <p style="font-size:13px;font-weight:700;color:#00daf3;font-family:'JetBrains Mono',monospace;" id="rotY">0.0°</p>
+          </div>
+          <div class="stat-divider"></div>
+          <div style="text-align:center;">
+            <p style="font-size:9px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;letter-spacing:0.08em;">ZOOM</p>
+            <p style="font-size:13px;font-weight:700;color:#6ce000;font-family:'JetBrains Mono',monospace;" id="zoomVal">1.0×</p>
+          </div>
+          <div class="stat-divider"></div>
+          <div style="text-align:center;">
+            <p style="font-size:9px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;letter-spacing:0.08em;">AUTO-SPIN</p>
+            <p style="font-size:13px;font-weight:700;font-family:'JetBrains Mono',monospace;" id="spinStatus">ON</p>
+          </div>
+        </div>
+
+        <!-- HUD: Buttons -->
+        <div id="hudButtons">
+          <button class="hud-btn active" id="btnSpin" onclick="toggleSpin()"><span>⟳</span> Auto Spin</button>
+          <button class="hud-btn" id="btnWire" onclick="toggleWireframe()"><span>⬡</span> Wireframe</button>
+          <button class="hud-btn" id="btnEnv"  onclick="cycleEnv()"><span>◈</span> Studio</button>
+          <button class="hud-btn" onclick="resetCamera()"><span>⊙</span> Reset View</button>
+        </div>
+
+        <!-- Loading screen -->
+        <div id="loadScreen">
+          <div class="model-spinner" id="loadSpinner">🐟</div>
+          <div style="text-align:center;">
+            <p style="font-size:16px;font-weight:800;color:#dde3ec;margin-bottom:4px;">Loading 3D Model</p>
+            <p style="font-size:11px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;" id="loadMsg">Initialising renderer…</p>
+          </div>
+          <div class="load-bar-track"><div class="load-bar-fill" id="loadBar" style="width:0%;"></div></div>
+          <p style="font-size:10px;color:#3a4a5a;font-family:'JetBrains Mono',monospace;" id="loadPct">0%</p>
+        </div>
+
+      </div>
+    </div>
+
+  </div><!-- end main -->
+
+<script>
+// ════════════════════════════════════════════════════════
+//  MODEL REGISTRY — just add an entry here for new models
+// ════════════════════════════════════════════════════════
+const MODELS = [
+  {
+    file:  '/static/models/Meshy_AI_aqua_0402092739_texture.glb',
+    name:  'Aquaponics System v1',
+    sub:   'Meshy_AI_aqua_0402092739',
+    emoji: '🐟',
+    color: '#00daf3',
+  },
+  {
+    file:  '/static/models/Meshy_AI_aqua1_0402100130_texture.glb',
+    name:  'Aquaponics System v2',
+    sub:   'Meshy_AI_aqua1_0402100130',
+    emoji: '🌿',
+    color: '#6ce000',
+  },
+  {
+    file:  '/static/models/Meshy_AI_Two_Tier_Aquaponics_S_0402103750_texture.glb',
+    name:  'Two-Tier Aquaponics',
+    sub:   'Meshy_AI_Two_Tier_0402103750',
+    emoji: '🐟🌿',
+    color: '#f59e0b',
+  },
+  {
+    file:  '/static/models/Meshy_AI_Aquaponic_Garden_Syst_0406042830_texture.glb',
+    name:  'Aquaponic Garden System',
+    sub:   'Meshy_AI_Aquaponic_Garden_0406042830',
+    emoji: '🌱',
+    color: '#6ce000',
+  },
+];
+
+// ════════════════════════════════════════════════════════
+//  AUTO-BUILD GALLERY CARDS FROM MODELS ARRAY
+// ════════════════════════════════════════════════════════
+(function buildCards() {
+  // Update badge count in header
+  document.querySelectorAll('.models-count-badge').forEach(el => {
+    el.textContent = MODELS.length + ' MODELS';
+  });
+  // Update sidebar count
+  const sbCount = document.getElementById('sidebarModelCount');
+  if (sbCount) sbCount.textContent = MODELS.length + ' GLB';
+
+  const grid = document.getElementById('cardsGrid');
+  MODELS.forEach((m, idx) => {
+    // Pick accent colour pair for tag background
+    const tagBg  = hexToRgba(m.color, 0.1);
+    const delay  = (0.05 + idx * 0.07).toFixed(2);
+
+    grid.insertAdjacentHTML('beforeend', `
+      <div class="model-card anim-in" style="animation-delay:${delay}s;" onclick="openViewer(${idx})">
+        <div class="card-preview" id="preview${idx}">
+          <div class="card-preview-scan"></div>
+          <div class="card-preview-glow"></div>
+          <div class="open-label"><div class="open-label-inner">▶ Open in 3D Viewer</div></div>
+          <div class="preview-loading" id="previewLoading${idx}">
+            <div class="preview-spinner">${m.emoji}</div>
+            <p style="font-size:10px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;">Loading preview…</p>
+          </div>
+        </div>
+        <div class="card-info">
+          <div class="card-tag" style="background:${tagBg};color:${m.color};">GLB · Textured</div>
+          <p class="card-title">${m.name}</p>
+          <p class="card-sub">${m.sub}</p>
+          <div class="card-meta">
+            <div class="card-meta-row"><span>Format</span><span>GLB / glTF 2.0</span></div>
+            <div class="card-meta-row"><span>Source</span><span>Meshy AI</span></div>
+            <div class="card-meta-row"><span>Textures</span><span>PBR · Baked</span></div>
+            <div class="card-meta-row"><span>Controls</span><span>Drag · Scroll · Dbl-click</span></div>
+          </div>
+          <div class="card-open-btn">◭ Open Full 3D Viewer →</div>
+        </div>
+      </div>`);
+  });
+})();
+
+function hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+// ════════════════════════════════════════════════════════
+//  MINI PREVIEW RENDERERS (one per card, runs after buildCards)
+// ════════════════════════════════════════════════════════
+const previewRenderers = [];
+
+MODELS.forEach((m, idx) => {
+  const container = document.getElementById(`preview${idx}`);
+  if (!container) return;
+
+  // Create mini canvas
+  const miniCanvas = document.createElement('canvas');
+  miniCanvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;';
+  container.insertBefore(miniCanvas, container.firstChild);
+
+  const W = container.offsetWidth  || 300;
+  const H = container.offsetHeight || 220;
+
+  const rend = new THREE.WebGLRenderer({ canvas: miniCanvas, antialias: true, alpha: true });
+  rend.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+  rend.outputEncoding = THREE.sRGBEncoding;
+  rend.toneMapping    = THREE.ACESFilmicToneMapping;
+  rend.toneMappingExposure = 1.1;
+  rend.setClearColor(0x000000, 0);
+  rend.setSize(W, H);
+
+  const sc  = new THREE.Scene();
+  sc.fog    = new THREE.FogExp2(0x0a0f14, 0.05);
+
+  const cam = new THREE.PerspectiveCamera(45, W / H, 0.01, 500);
+  cam.position.set(2.5, 1.8, 3.5);
+
+  // Lights
+  sc.add(new THREE.AmbientLight(0x8ab0c8, 0.7));
+  const dl = new THREE.DirectionalLight(0xffffff, 1.1);
+  dl.position.set(4, 6, 4);
+  sc.add(dl);
+  const fl = new THREE.DirectionalLight(parseInt(m.color.replace('#','0x')), 0.4);
+  fl.position.set(-3, 1, -3);
+  sc.add(fl);
+  sc.add(new THREE.HemisphereLight(0x0a2040, 0x060810, 0.4));
+
+  // Grid
+  const grid = new THREE.GridHelper(8, 16, 0x1e2830, 0x111820);
+  grid.material.opacity = 0.4; grid.material.transparent = true;
+  sc.add(grid);
+
+  let previewModel = null;
+  let animFrameId  = null;
+
+  const loader = new THREE.GLTFLoader();
+  loader.load(
+    m.file,
+    function(gltf) {
+      const loadEl = document.getElementById(`previewLoading${idx}`);
+      if (loadEl) loadEl.style.display = 'none';
+
+      previewModel = gltf.scene;
+      const box = new THREE.Box3().setFromObject(previewModel);
+      const sz  = new THREE.Vector3();
+      const cen = new THREE.Vector3();
+      box.getSize(sz); box.getCenter(cen);
+
+      const scale = 2.0 / Math.max(sz.x, sz.y, sz.z);
+      previewModel.scale.setScalar(scale);
+      previewModel.position.sub(cen.multiplyScalar(scale));
+      previewModel.position.y += (sz.y * scale) / 2;
+
+      previewModel.traverse(child => {
+        if (child.isMesh) {
+          const mats = Array.isArray(child.material) ? child.material : [child.material];
+          mats.forEach(mat => { if (mat.isMeshStandardMaterial) mat.envMapIntensity = 0.7; });
+        }
+      });
+
+      sc.add(previewModel);
+
+      // Reframe camera
+      const rb = new THREE.Box3().setFromObject(previewModel);
+      const rs = new THREE.Vector3(); rb.getSize(rs);
+      const rc = new THREE.Vector3(); rb.getCenter(rc);
+      const dist = Math.max(rs.x, rs.y, rs.z) * 1.7;
+      cam.position.set(dist * 0.7, dist * 0.55, dist);
+      cam.lookAt(rc);
+    },
+    null,
+    function(err) {
+      const loadEl = document.getElementById(`previewLoading${idx}`);
+      if (loadEl) {
+        loadEl.innerHTML = `<p style="font-size:10px;color:#ff6464;font-family:'JetBrains Mono',monospace;padding:8px;text-align:center;">⚠ GLB file not found.<br>Place in same folder.</p>`;
+      }
+    }
+  );
+
+  let angle = 0;
+  function miniAnimate() {
+    animFrameId = requestAnimationFrame(miniAnimate);
+    angle += 0.008;
+    if (previewModel) {
+      previewModel.rotation.y = angle;
+    }
+    rend.render(sc, cam);
+  }
+  miniAnimate();
+
+  previewRenderers.push({ rend, animFrameId });
+});
+
+// ════════════════════════════════════════════════════════
+//  FULL 3D VIEWER
+// ════════════════════════════════════════════════════════
+let mainRenderer = null, mainScene = null, mainCamera = null;
+let mainControls = null, mainModel  = null, mainMixers = [];
+let mainAutoSpin = true, mainWireMode = false, mainOrigMats = [];
+let mainAnimId   = null, mainClock = null;
+let mainEnvMode  = 0;
+
+const ENV_MODES = [
+  { name:'Studio', ambient:0x8ab0c8, ambInt:0.6, dir:0xffffff, dirInt:1.2, fill:0x00daf3, fillInt:0.35 },
+  { name:'Cyan',   ambient:0x003040, ambInt:0.8, dir:0x00daf3, dirInt:1.8, fill:0x0077ff, fillInt:0.5 },
+  { name:'Warm',   ambient:0x302010, ambInt:0.5, dir:0xffcc44, dirInt:1.5, fill:0xff8800, fillInt:0.3 },
+  { name:'Night',  ambient:0x050510, ambInt:0.2, dir:0x6688ff, dirInt:0.8, fill:0x6ce000, fillInt:0.4 },
+];
+
+let mainAmbLight, mainDirLight, mainFillLight;
+
+function openViewer(modelIdx) {
+  const m = MODELS[modelIdx];
+
+  // Swap views
+  document.getElementById('galleryView').style.display = 'none';
+  const vv = document.getElementById('viewerView');
+  vv.style.display = 'flex';
+  vv.style.flexDirection = 'column';
+
+  // Update header
+  document.getElementById('headerTitle').textContent = m.name;
+  document.getElementById('headerSub').textContent   = 'Interactive · Drag to rotate · Scroll to zoom';
+  document.getElementById('fpsBadge').style.display       = 'inline-flex';
+  document.getElementById('rendererBadge').style.display  = 'inline-flex';
+  document.getElementById('hudModelName').textContent      = m.name;
+  document.getElementById('loadSpinner').textContent       = m.emoji;
+
+  // Reset load bar
+  setLoadMsg('Initialising renderer…', 0);
+  document.getElementById('loadScreen').classList.remove('hidden');
+  document.getElementById('loadBar').style.background = 'linear-gradient(90deg,#00daf3,#6ce000)';
+
+  // Tear down previous renderer if exists
+  if (mainRenderer) {
+    cancelAnimationFrame(mainAnimId);
+    mainRenderer.dispose();
+    mainRenderer = null;
+  }
+
+  // Wait a tick for the DOM to show viewerWrap
+  requestAnimationFrame(() => {
+    const wrap   = document.getElementById('viewerWrap');
+    const canvas = document.getElementById('threeCanvas');
+
+    mainRenderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    mainRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    mainRenderer.outputEncoding     = THREE.sRGBEncoding;
+    mainRenderer.toneMapping        = THREE.ACESFilmicToneMapping;
+    mainRenderer.toneMappingExposure = 1.2;
+    mainRenderer.shadowMap.enabled  = true;
+    mainRenderer.shadowMap.type     = THREE.PCFSoftShadowMap;
+    mainRenderer.setClearColor(0x000000, 0);
+
+    mainScene  = new THREE.Scene();
+    mainCamera = new THREE.PerspectiveCamera(45, wrap.clientWidth / wrap.clientHeight, 0.01, 1000);
+    mainCamera.position.set(0, 1.5, 4.5);
+    mainScene.fog = new THREE.FogExp2(0x0a0f14, 0.04);
+
+    // Controls
+    mainControls = new THREE.OrbitControls(mainCamera, canvas);
+    mainControls.enableDamping   = true;
+    mainControls.dampingFactor   = 0.06;
+    mainControls.minDistance     = 0.5;
+    mainControls.maxDistance     = 20;
+    mainControls.maxPolarAngle   = Math.PI * 0.9;
+    mainControls.enablePan       = true;
+    mainControls.autoRotate      = true;
+    mainControls.autoRotateSpeed = 0.8;
+    mainControls.target.set(0, 0.5, 0);
+
+    // Lights
+    mainAmbLight = new THREE.AmbientLight(0x8ab0c8, 0.6); mainScene.add(mainAmbLight);
+    mainDirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    mainDirLight.position.set(5, 8, 5);
+    mainDirLight.castShadow = true;
+    mainDirLight.shadow.mapSize.set(2048, 2048);
+    mainDirLight.shadow.bias = -0.001;
+    mainScene.add(mainDirLight);
+    mainFillLight = new THREE.DirectionalLight(0x00daf3, 0.35);
+    mainFillLight.position.set(-4, 2, -3);
+    mainScene.add(mainFillLight);
+    const rim = new THREE.DirectionalLight(0x6ce000, 0.2);
+    rim.position.set(0, -2, -5);
+    mainScene.add(rim);
+    mainScene.add(new THREE.HemisphereLight(0x0a2040, 0x060810, 0.5));
+
+    // Ground
+    const gm = new THREE.MeshStandardMaterial({ color:0x050c14, metalness:0, roughness:0.95, transparent:true, opacity:0.6 });
+    const gnd = new THREE.Mesh(new THREE.PlaneGeometry(30,30), gm);
+    gnd.rotation.x = -Math.PI/2; gnd.position.y = -0.01; gnd.receiveShadow = true;
+    mainScene.add(gnd);
+    const gh = new THREE.GridHelper(10, 20, 0x1e2830, 0x111820);
+    gh.position.y = 0.001; gh.material.opacity = 0.5; gh.material.transparent = true;
+    mainScene.add(gh);
+
+    // Reset state
+    mainModel = null; mainMixers = []; mainAutoSpin = true; mainWireMode = false;
+    mainOrigMats = []; mainEnvMode = 0;
+    document.getElementById('btnSpin').classList.add('active');
+    document.getElementById('btnWire').classList.remove('active');
+    document.getElementById('btnEnv').textContent = '◈ Studio';
+    document.getElementById('spinStatus').textContent = 'ON';
+    document.getElementById('spinStatus').style.color = '#6ce000';
+    document.getElementById('meshCount').textContent = '—';
+    document.getElementById('triCount').textContent  = '—';
+
+    // Resize
+    function onResize() {
+      const w = wrap.clientWidth, h = wrap.clientHeight;
+      mainRenderer.setSize(w, h);
+      mainCamera.aspect = w / h;
+      mainCamera.updateProjectionMatrix();
+    }
+    window.addEventListener('resize', onResize);
+    onResize();
+
+    // Double-click reset
+    canvas.addEventListener('dblclick', resetCamera);
+
+    setLoadMsg('Fetching model file…', 5);
+
+    const loader = new THREE.GLTFLoader();
+    loader.load(
+      m.file,
+      function(gltf) {
+        setLoadMsg('Processing geometry…', 85);
+        mainModel = gltf.scene;
+
+        const box = new THREE.Box3().setFromObject(mainModel);
+        const sz  = new THREE.Vector3(); const cen = new THREE.Vector3();
+        box.getSize(sz); box.getCenter(cen);
+
+        const scale = 2.5 / Math.max(sz.x, sz.y, sz.z);
+        mainModel.scale.setScalar(scale);
+        mainModel.position.sub(cen.multiplyScalar(scale));
+        mainModel.position.y += (sz.y * scale) / 2 - 0.02;
+
+        let meshCount = 0, triCount = 0;
+        mainModel.traverse(child => {
+          if (child.isMesh) {
+            meshCount++;
+            child.castShadow = true; child.receiveShadow = true;
+            if (child.geometry.index) triCount += child.geometry.index.count / 3;
+            else if (child.geometry.attributes.position) triCount += child.geometry.attributes.position.count / 3;
+            const mats = Array.isArray(child.material) ? child.material : [child.material];
+            mats.forEach(mat => {
+              mainOrigMats.push(mat.clone());
+              if (mat.isMeshStandardMaterial || mat.isMeshPhysicalMaterial) mat.envMapIntensity = 0.8;
+            });
+          }
+        });
+
+        if (gltf.animations && gltf.animations.length) {
+          const mixer = new THREE.AnimationMixer(mainModel);
+          gltf.animations.forEach(clip => mixer.clipAction(clip).play());
+          mainMixers.push(mixer);
+        }
+
+        mainScene.add(mainModel);
+
+        const rb = new THREE.Box3().setFromObject(mainModel);
+        const rs = new THREE.Vector3(); const rc = new THREE.Vector3();
+        rb.getSize(rs); rb.getCenter(rc);
+        const dist = Math.max(rs.x, rs.y, rs.z) * 1.6;
+        mainCamera.position.set(dist*0.7, dist*0.55, dist);
+        mainControls.target.copy(rc);
+        mainControls.update();
+
+        document.getElementById('meshCount').textContent = meshCount.toLocaleString();
+        document.getElementById('triCount').textContent  = Math.round(triCount).toLocaleString();
+
+        setLoadMsg('Rendering…', 100);
+        setTimeout(() => document.getElementById('loadScreen').classList.add('hidden'), 500);
+      },
+      function(xhr) {
+        const pct = Math.round((xhr.loaded / xhr.total) * 80);
+        setLoadMsg(`Loading model… ${pct}%`, pct + 5);
+      },
+      function(err) {
+        console.error('GLB load error:', err);
+        setLoadMsg('⚠ Error loading model. Make sure the GLB file is in the same folder.', 0);
+        document.getElementById('loadBar').style.background = '#ff6464';
+      }
+    );
+
+    // Render loop
+    mainClock = new THREE.Clock();
+    let frameCount = 0, fpsTime = 0;
+    function animate() {
+      mainAnimId = requestAnimationFrame(animate);
+      const delta = mainClock.getDelta();
+      mainMixers.forEach(mx => mx.update(delta));
+      mainControls.update();
+      frameCount++; fpsTime += delta;
+      if (fpsTime >= 1.0) {
+        document.getElementById('fpsBadge').textContent = frameCount + ' FPS';
+        frameCount = 0; fpsTime = 0;
+      }
+      if (mainModel) {
+        document.getElementById('rotX').textContent = (THREE.MathUtils.radToDeg(mainControls.getPolarAngle()) - 90).toFixed(1) + '°';
+        document.getElementById('rotY').textContent = THREE.MathUtils.radToDeg(mainControls.getAzimuthalAngle()).toFixed(1) + '°';
+        const cd = mainCamera.position.distanceTo(mainControls.target);
+        document.getElementById('zoomVal').textContent = (4.5 / cd).toFixed(2) + '×';
+      }
+      mainRenderer.render(mainScene, mainCamera);
+    }
+    animate();
+  });
+}
+
+function closeViewer() {
+  // Stop render loop
+  if (mainAnimId) cancelAnimationFrame(mainAnimId);
+  // Restore gallery
+  document.getElementById('viewerView').style.display  = 'none';
+  document.getElementById('galleryView').style.display = 'block';
+  document.getElementById('headerTitle').textContent   = '3D Model Gallery';
+  document.getElementById('headerSub').textContent     = 'Select a model to open the 3D viewer';
+  document.getElementById('fpsBadge').style.display       = 'none';
+  document.getElementById('rendererBadge').style.display  = 'none';
+}
+
+function setLoadMsg(msg, pct) {
+  document.getElementById('loadMsg').textContent  = msg;
+  document.getElementById('loadBar').style.width  = pct + '%';
+  document.getElementById('loadPct').textContent  = pct + '%';
+}
+
+// ════════════════════════════════════════════
+//  VIEWER BUTTON ACTIONS
+// ════════════════════════════════════════════
+function toggleSpin() {
+  mainAutoSpin = !mainAutoSpin;
+  if (mainControls) mainControls.autoRotate = mainAutoSpin;
+  const btn = document.getElementById('btnSpin');
+  const st  = document.getElementById('spinStatus');
+  btn.classList.toggle('active', mainAutoSpin);
+  st.textContent = mainAutoSpin ? 'ON' : 'OFF';
+  st.style.color  = mainAutoSpin ? '#6ce000' : '#5a6a7a';
+}
+
+function toggleWireframe() {
+  if (!mainModel) return;
+  mainWireMode = !mainWireMode;
+  document.getElementById('btnWire').classList.toggle('active', mainWireMode);
+  mainModel.traverse(child => {
+    if (child.isMesh) {
+      const mats = Array.isArray(child.material) ? child.material : [child.material];
+      mats.forEach(m => { m.wireframe = mainWireMode; });
+    }
+  });
+}
+
+function cycleEnv() {
+  mainEnvMode = (mainEnvMode + 1) % ENV_MODES.length;
+  const e = ENV_MODES[mainEnvMode];
+  if (mainAmbLight)  { mainAmbLight.color.setHex(e.ambient); mainAmbLight.intensity = e.ambInt; }
+  if (mainDirLight)  { mainDirLight.color.setHex(e.dir);     mainDirLight.intensity  = e.dirInt; }
+  if (mainFillLight) { mainFillLight.color.setHex(e.fill);   mainFillLight.intensity = e.fillInt; }
+  document.getElementById('btnEnv').textContent = '◈ ' + e.name;
+}
+
+function resetCamera() {
+  if (!mainModel || !mainControls) return;
+  const box = new THREE.Box3().setFromObject(mainModel);
+  const sz  = new THREE.Vector3(); const cen = new THREE.Vector3();
+  box.getSize(sz); box.getCenter(cen);
+  const dist = Math.max(sz.x, sz.y, sz.z) * 1.6;
+  mainControls.target.copy(cen);
+  mainCamera.position.set(dist*0.7, dist*0.55, dist);
+  mainControls.update();
+}
+</script>
+</body>
+</html>

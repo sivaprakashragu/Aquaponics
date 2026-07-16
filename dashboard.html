@@ -1,0 +1,1436 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard | The Living Lab</title>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;400;500;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: { extend: {
+        colors: { primary: "#00daf3", surface: "#0a0f14" },
+        fontFamily: { headline: ["Manrope"], mono: ["JetBrains Mono"] }
+      }}
+    };
+  </script>
+  <style>
+    * { box-sizing: border-box; }
+    body { background: #0a0f14; color: #dde3ec; font-family: 'Manrope', sans-serif; margin: 0; overflow: hidden; }
+
+    /* ── AQUAPONICS CYCLE ── */
+    .cycle-section { padding: 0 0 60px; }
+    .cycle-title-badge { display:inline-flex;align-items:center;gap:8px;background:rgba(108,224,0,0.08);border:1px solid rgba(108,224,0,0.2);border-radius:20px;padding:4px 14px;font-size:10px;color:#6ce000;font-family:'JetBrains Mono',monospace;letter-spacing:0.1em;text-transform:uppercase; }
+
+    /* Cycle diagram */
+    .cycle-diagram { position:relative;width:100%;max-width:860px;margin:0 auto 48px; }
+    .cycle-svg-wrap svg { width:100%;height:auto;overflow:visible; }
+
+    /* Step nodes */
+    .cycle-node { cursor:default;transition:all 0.3s; }
+    .cycle-node:hover .node-ring { opacity:1;transform:scale(1.08); }
+    .node-ring { transition:all 0.3s;transform-origin:center; }
+
+    /* Pulse animations for arrows */
+    @keyframes flowPulse { 0%{stroke-dashoffset:200} 100%{stroke-dashoffset:0} }
+    .flow-arrow { animation:flowPulse 3s linear infinite; }
+    @keyframes particleMove { 0%{opacity:0;offset-distance:0%} 20%{opacity:1} 80%{opacity:1} 100%{opacity:0;offset-distance:100%} }
+
+    /* Intro text */
+    .intro-section { max-width:860px;margin:0 auto; }
+    .intro-card { background:#111820;border:1px solid #1e2830;border-radius:20px;padding:36px 40px;position:relative;overflow:hidden; }
+    .intro-card::before { content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,#6ce000,#00daf3,transparent); }
+    .intro-para { font-size:13.5px;color:#8a9aaa;line-height:1.9;margin-bottom:14px; }
+    .intro-para:last-child { margin-bottom:0; }
+    .intro-highlight { color:#00daf3;font-weight:700; }
+    .intro-green { color:#6ce000;font-weight:700; }
+    .intro-amber { color:#f59e0b;font-weight:700; }
+
+    /* scroll reveal */
+    .reveal { opacity:0;transform:translateY(32px);transition:opacity 0.7s ease,transform 0.7s ease; }
+    .reveal.visible { opacity:1;transform:translateY(0); }
+    body::before { content:''; position:fixed;inset:0;background-image:linear-gradient(rgba(0,218,243,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,218,243,0.03) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0; }
+
+    .sidebar { width:220px;background:#0d1319;border-right:1px solid #1e2830; }
+    .nav-item { display:flex;align-items:center;gap:10px;padding:12px 20px;color:#5a6a7a;font-size:13px;font-weight:500;cursor:pointer;transition:all 0.2s;border-left:2px solid transparent;text-decoration:none; }
+    .nav-item:hover { color:#00daf3;background:rgba(0,218,243,0.05); }
+    .nav-item.active { color:#00daf3;border-left-color:#00daf3;background:rgba(0,218,243,0.07); }
+    .nav-icon { font-size:16px;width:20px;text-align:center; }
+    .pulse-dot { width:8px;height:8px;border-radius:50%;background:#6ce000;animation:pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(108,224,0,0.4)} 50%{box-shadow:0 0 0 6px rgba(108,224,0,0)} }
+
+    .stat-card { background:#111820;border:1px solid #1e2830;border-radius:14px;padding:20px;transition:border-color 0.3s,transform 0.2s; }
+    .badge { font-size:10px;padding:2px 8px;border-radius:20px;font-family:'JetBrains Mono',monospace;letter-spacing:0.05em;text-transform:uppercase; }
+    .badge-ok { background:rgba(108,224,0,0.1);color:#6ce000; }
+    .badge-warn { background:rgba(245,158,11,0.1);color:#f59e0b; }
+    .badge-cyan { background:rgba(0,218,243,0.1);color:#00daf3; }
+    .badge-red { background:rgba(255,100,100,0.1);color:#ff6464; }
+
+    @keyframes fadeInUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+    .anim-1 { animation:fadeInUp 0.5s ease 0.1s both; }
+    .anim-2 { animation:fadeInUp 0.5s ease 0.25s both; }
+    .anim-3 { animation:fadeInUp 0.5s ease 0.4s both; }
+
+    .glass { background:rgba(17,24,32,0.85);backdrop-filter:blur(20px);border:1px solid rgba(0,218,243,0.1); }
+    .glow { text-shadow:0 0 40px rgba(0,218,243,0.6); }
+
+    /* Scan line */
+    .scan-line { position:absolute;inset:0;border-radius:20px;overflow:hidden;pointer-events:none; }
+    .scan-line::after { content:'';position:absolute;top:-100%;left:0;right:0;height:40%;background:linear-gradient(transparent,rgba(0,218,243,0.04),transparent);animation:scan 4s linear infinite; }
+    @keyframes scan { to{top:200%} }
+
+    /* Big temp number transitions */
+    .temp-flip { transition:all 0.4s cubic-bezier(0.34,1.56,0.64,1); }
+
+    /* Thermometer visual */
+    .thermo-container { display:flex;flex-direction:column;align-items:center;gap:4px; }
+    .thermo-bar { width:24px;background:#1e2830;border-radius:12px;overflow:hidden;position:relative; }
+    .thermo-fill { background:linear-gradient(to top,#ff6464,#f59e0b,#00daf3);border-radius:12px;transition:height 0.8s ease;width:100%; }
+    .thermo-bulb { width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#ff6464,#f59e0b);box-shadow:0 0 20px rgba(255,100,100,0.4);display:flex;align-items:center;justify-content:center;font-size:14px; }
+
+    /* Alert row */
+    .alert-row { display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#0d1319;border-radius:10px;border:1px solid #1e2830;margin-bottom:6px; }
+
+    /* Range bar */
+    .range-track { position:relative;height:8px;background:#1e2830;border-radius:4px;overflow:hidden; }
+    .range-fill { position:absolute;height:100%;border-radius:4px;transition:left 0.8s ease,width 0.5s ease; }
+    .range-pointer { position:absolute;top:-4px;width:16px;height:16px;border-radius:50%;border:2px solid #0a0f14;transform:translateX(-50%);transition:left 0.8s ease;z-index:2; }
+
+    ::-webkit-scrollbar { width:4px; } ::-webkit-scrollbar-track { background:transparent; } ::-webkit-scrollbar-thumb { background:#1e2830;border-radius:2px; }
+
+    .bar-track { height:4px;background:#1e2830;border-radius:2px;overflow:hidden; }
+    .bar-fill { height:100%;border-radius:2px; }
+
+    /* Temp status indicator ring */
+    @keyframes ringPulse { 0%,100%{box-shadow:0 0 0 0 rgba(0,218,243,0.3)} 50%{box-shadow:0 0 0 14px rgba(0,218,243,0)} }
+    .temp-ring { animation:ringPulse 2.5s infinite; }
+
+    /* pH gauge visual */
+    .ph-gauge-bar { height:20px;border-radius:10px;background:linear-gradient(90deg,#ff6464 0%,#f59e0b 20%,#6ce000 40%,#00daf3 60%,#0077ff 80%,#7c3aed 100%);position:relative;overflow:visible; }
+    .ph-gauge-pointer { position:absolute;top:-6px;width:4px;height:32px;background:#fff;border-radius:2px;transform:translateX(-50%);transition:left 0.8s ease;box-shadow:0 0 8px rgba(255,255,255,0.5); }
+    @keyframes phRingPulse { 0%,100%{box-shadow:0 0 0 0 rgba(108,224,0,0.3)} 50%{box-shadow:0 0 0 14px rgba(108,224,0,0)} }
+    .ph-ring { animation:phRingPulse 2.5s infinite; }
+
+    /* ── ULTRASONIC / DEPTH ── */
+    @keyframes depthRingPulse { 0%,100%{box-shadow:0 0 0 0 rgba(124,58,237,0.35)} 50%{box-shadow:0 0 0 14px rgba(124,58,237,0)} }
+    .depth-ring { animation:depthRingPulse 2.5s infinite; }
+    .depth-tank-body { width:48px;border:2px solid rgba(124,58,237,0.35);border-top:none;border-radius:0 0 8px 8px;background:#0d1319;overflow:hidden;position:relative;flex-shrink:0; }
+    .depth-tank-water { position:absolute;bottom:0;left:0;right:0;background:linear-gradient(to top,rgba(124,58,237,0.55),rgba(124,58,237,0.18));transition:height 1s ease;border-radius:0 0 6px 6px; }
+    .depth-tank-sensor { width:48px;height:12px;background:#1e2830;border:2px solid rgba(124,58,237,0.4);border-radius:5px 5px 0 0;display:flex;align-items:center;justify-content:center;font-size:8px;color:#a78bfa;font-family:'JetBrains Mono',monospace;flex-shrink:0; }
+    .depth-sonar-beam { position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:2px;background:linear-gradient(to bottom,rgba(124,58,237,0.8),transparent);transition:height 1s ease; }
+  </style>
+</head>
+<body class="flex overflow-hidden h-screen" style="position:relative;z-index:1;">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar flex flex-col h-screen flex-shrink-0" style="z-index:10;position:relative;">
+    <div class="px-5 py-6" style="border-bottom:1px solid #1e2830;">
+      <div class="flex items-center gap-3 mb-1">
+        <div style="width:28px;height:28px;background:linear-gradient(135deg,#00daf3,#0077ff);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#0a0f14;">L</div>
+        <span class="font-bold text-sm" style="color:#dde3ec;">Living Lab</span>
+      </div>
+      <p class="text-xs ml-10" style="color:#3a4a5a;font-family:'JetBrains Mono',monospace;">AQ-SYS v2.4</p>
+    </div>
+    <div class="px-5 py-4" style="border-bottom:1px solid #1e2830;">
+      <div class="flex items-center gap-2">
+        <div class="pulse-dot"></div>
+        <span style="font-size:11px;color:#6ce000;font-family:'JetBrains Mono',monospace;letter-spacing:0.05em;">SENSOR ONLINE</span>
+      </div>
+    </div>
+    <nav class="flex-1 py-4">
+      <div class="px-5 mb-3" style="font-size:10px;color:#3a4a5a;letter-spacing:0.1em;font-family:'JetBrains Mono',monospace;">NAVIGATION</div>
+      <a href="/" class="nav-item active"><span class="nav-icon">◈</span> Dashboard</a>
+      <a href="/list" class="nav-item"><span class="nav-icon">⊞</span> Fish Inventory</a>
+      <a href="/disease" class="nav-item"><span class="nav-icon">⬡</span> Disease Analysis</a>
+      <a href="/aquaponics" class="nav-item"><span class="nav-icon">◎</span> Aquaponics</a>
+      <a href="/chatbot" class="nav-item"><span class="nav-icon">◬</span> AI Assistant</a>
+      <a href="/dimension" class="nav-item"><span class="nav-icon">◭</span> 3D Model</a>
+    </nav>
+    <div class="px-5 py-4" style="border-top:1px solid #1e2830;">
+      <div class="stat-card" style="padding:12px;">
+        <div class="flex justify-between items-center mb-1">
+          <span style="font-size:11px;color:#5a6a7a;">Sensors</span>
+          <span class="badge badge-ok" id="sensorStatusBadge">Active</span>
+        </div>
+        <p class="font-bold" style="color:#00daf3;font-size:12px;">🌡 Temp · ⚗️ pH · 📡 Depth</p>
+        <p style="font-size:10px;color:#5a6a7a;margin-top:2px;">DS18B20 + pH-4502C + HC-SR04</p>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="flex-1 flex flex-col overflow-hidden" style="position:relative;z-index:1;">
+    <header class="flex justify-between items-center px-8 h-14 flex-shrink-0" style="border-bottom:1px solid #1e2830;background:rgba(10,15,20,0.9);backdrop-filter:blur(20px);">
+      <div>
+        <h1 class="font-bold text-sm" style="color:#dde3ec;">Dashboard</h1>
+        <p style="font-size:11px;color:#3a4a5a;font-family:'JetBrains Mono',monospace;" id="live-time">--:--:-- UTC</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <span class="badge badge-cyan">LIVE</span>
+        <button onclick="openComboModal()" style="background:linear-gradient(135deg,#6ce000,#00daf3);color:#0a0f14;font-weight:700;font-size:12px;padding:7px 18px;border-radius:8px;border:none;cursor:pointer;transition:all 0.2s;display:flex;align-items:center;gap:6px;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
+          <span style="font-size:14px;">🌿</span> Check Suitable Fish &amp; Plants
+        </button>
+        <button onclick="toggleSensor(true)" style="background:#00daf3;color:#0a0f14;font-weight:700;font-size:12px;padding:7px 16px;border-radius:8px;border:none;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.background='#00c4db'" onmouseout="this.style.background='#00daf3'">Sensor ON</button>
+        <button onclick="toggleSensor(false)" style="background:#1e2830;color:#5a6a7a;font-size:12px;padding:7px 16px;border-radius:8px;border:none;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.background='#252e38';this.style.color='#dde3ec'" onmouseout="this.style.background='#1e2830';this.style.color='#5a6a7a'">Sensor OFF</button>
+      </div>
+    </header>
+
+    <main class="flex-1 overflow-y-auto" style="padding:16px 20px;">
+
+      <!-- HERO ROW: TEMP · pH · DEPTH (3 equal columns) -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px;">
+
+        <!-- ── TEMPERATURE HERO CARD ── -->
+        <div class="glass rounded-2xl relative overflow-hidden anim-1" style="border:1px solid rgba(0,218,243,0.12);padding:16px;">
+          <div class="scan-line"></div>
+          <p style="font-size:9px;color:#5a6a7a;letter-spacing:0.15em;font-family:'JetBrains Mono',monospace;margin-bottom:6px;">◈ WATER TEMPERATURE · TANK A</p>
+          <div class="flex items-end gap-2 mb-1">
+            <span class="font-bold glow temp-flip" id="temp-display" style="color:#00daf3;line-height:1;font-family:'JetBrains Mono',monospace;letter-spacing:-2px;font-size:48px;">---</span>
+            <div style="padding-bottom:4px;">
+              <span style="font-size:18px;color:#5a6a7a;font-weight:300;">°C</span>
+            </div>
+            <div style="padding-bottom:6px;">
+              <span class="badge" id="tempBadge" style="background:rgba(108,224,0,0.15);color:#6ce000;font-size:10px;">OPTIMAL</span>
+            </div>
+          </div>
+          <p style="font-size:10px;color:#5a6a7a;margin-bottom:10px;font-family:'JetBrains Mono',monospace;">
+            Safe: <span style="color:#00daf3;">24°C–32°C</span> &nbsp;Δ: <span id="tempDelta" style="color:#6ce000;">+0.2°C</span>
+          </p>
+          <!-- Range bar -->
+          <div style="margin-bottom:10px;">
+            <div class="flex justify-between mb-1">
+              <span style="font-size:9px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;">20°C</span>
+              <span style="font-size:9px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;">40°C</span>
+            </div>
+            <div class="range-track">
+              <div style="position:absolute;left:20%;width:40%;height:100%;background:rgba(108,224,0,0.15);border-radius:4px;"></div>
+              <div class="range-pointer temp-ring" id="rangePointer" style="background:#00daf3;left:42%;"></div>
+            </div>
+            <div class="flex justify-between mt-1">
+              <span style="font-size:8px;color:#3a4a5a;font-family:'JetBrains Mono',monospace;">Cold</span>
+              <span style="font-size:8px;color:#6ce000;font-family:'JetBrains Mono',monospace;">Optimal</span>
+              <span style="font-size:8px;color:#3a4a5a;font-family:'JetBrains Mono',monospace;">Hot</span>
+            </div>
+          </div>
+          <!-- Mini stats row -->
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
+            <div style="background:#0d1319;border:1px solid #1e2830;border-radius:8px;padding:7px 8px;text-align:center;">
+              <p style="font-size:8px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;margin-bottom:2px;">MIN</p>
+              <p class="font-bold" style="color:#00daf3;font-size:13px;" id="tempMin">---</p>
+            </div>
+            <div style="background:#0d1319;border:1px solid #1e2830;border-radius:8px;padding:7px 8px;text-align:center;">
+              <p style="font-size:8px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;margin-bottom:2px;">MAX</p>
+              <p class="font-bold" style="color:#f59e0b;font-size:13px;" id="tempMax">---</p>
+            </div>
+            <div style="background:#0d1319;border:1px solid #1e2830;border-radius:8px;padding:7px 8px;text-align:center;">
+              <p style="font-size:8px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;margin-bottom:2px;">AVG</p>
+              <p class="font-bold" style="color:#6ce000;font-size:13px;" id="tempAvg">---</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── pH HERO CARD ── -->
+        <div class="glass rounded-2xl relative overflow-hidden anim-1" style="border:1px solid rgba(108,224,0,0.12);animation-delay:0.15s;padding:16px;">
+          <div class="scan-line"></div>
+          <p style="font-size:9px;color:#5a6a7a;letter-spacing:0.15em;font-family:'JetBrains Mono',monospace;margin-bottom:6px;">⚗️ pH LEVEL · TANK A</p>
+          <div class="flex items-end gap-2 mb-1">
+            <span class="font-bold temp-flip" id="ph-display" style="color:#6ce000;line-height:1;font-family:'JetBrains Mono',monospace;letter-spacing:-2px;font-size:48px;">7.2</span>
+            <div style="padding-bottom:4px;">
+              <span style="font-size:18px;color:#5a6a7a;font-weight:300;">pH</span>
+            </div>
+            <div style="padding-bottom:6px;">
+              <span class="badge" id="phBadge" style="background:rgba(108,224,0,0.15);color:#6ce000;font-size:10px;">OPTIMAL</span>
+            </div>
+          </div>
+          <p style="font-size:10px;color:#5a6a7a;margin-bottom:10px;font-family:'JetBrains Mono',monospace;">
+            Safe: <span style="color:#6ce000;">6.5–8.0</span> &nbsp;Δ: <span id="phDelta" style="color:#6ce000;">+0.0</span>
+          </p>
+          <!-- pH gradient gauge bar -->
+          <div style="margin-bottom:10px;">
+            <div class="flex justify-between mb-1">
+              <span style="font-size:9px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;">pH 4</span>
+              <span style="font-size:9px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;">pH 10</span>
+            </div>
+            <div style="position:relative;">
+              <div class="ph-gauge-bar"></div>
+              <div class="ph-gauge-pointer" id="phGaugePointer" style="left:50%;"></div>
+            </div>
+            <div class="flex justify-between mt-2">
+              <span style="font-size:8px;color:#ff6464;font-family:'JetBrains Mono',monospace;">Acidic</span>
+              <span style="font-size:8px;color:#6ce000;font-family:'JetBrains Mono',monospace;">Optimal</span>
+              <span style="font-size:8px;color:#7c3aed;font-family:'JetBrains Mono',monospace;">Alkaline</span>
+            </div>
+          </div>
+          <!-- Mini stats row -->
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
+            <div style="background:#0d1319;border:1px solid #1e2830;border-radius:8px;padding:7px 8px;text-align:center;">
+              <p style="font-size:8px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;margin-bottom:2px;">MIN</p>
+              <p class="font-bold" style="color:#00daf3;font-size:13px;" id="phMin">6.8</p>
+            </div>
+            <div style="background:#0d1319;border:1px solid #1e2830;border-radius:8px;padding:7px 8px;text-align:center;">
+              <p style="font-size:8px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;margin-bottom:2px;">MAX</p>
+              <p class="font-bold" style="color:#f59e0b;font-size:13px;" id="phMax">7.6</p>
+            </div>
+            <div style="background:#0d1319;border:1px solid #1e2830;border-radius:8px;padding:7px 8px;text-align:center;">
+              <p style="font-size:8px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;margin-bottom:2px;">AVG</p>
+              <p class="font-bold" style="color:#6ce000;font-size:13px;" id="phAvg">7.2</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── ULTRASONIC DEPTH HERO CARD ── -->
+        <div class="glass rounded-2xl relative overflow-hidden anim-1" style="border:1px solid rgba(124,58,237,0.18);animation-delay:0.3s;padding:16px;">
+          <div class="scan-line"></div>
+          <p style="font-size:9px;color:#5a6a7a;letter-spacing:0.15em;font-family:'JetBrains Mono',monospace;margin-bottom:6px;">📡 WATER DEPTH · TANK A</p>
+          <div class="flex items-end gap-2 mb-1">
+            <span class="font-bold temp-flip" id="depth-display" style="color:#a78bfa;line-height:1;font-family:'JetBrains Mono',monospace;letter-spacing:-2px;font-size:48px;">--.-</span>
+            <div style="padding-bottom:4px;">
+              <span style="font-size:18px;color:#5a6a7a;font-weight:300;">cm</span>
+            </div>
+            <div style="padding-bottom:6px;">
+              <span class="badge" id="depthBadge" style="background:rgba(124,58,237,0.15);color:#a78bfa;font-size:10px;">NORMAL</span>
+            </div>
+          </div>
+          <p style="font-size:10px;color:#5a6a7a;margin-bottom:10px;font-family:'JetBrains Mono',monospace;">
+            Safe: <span style="color:#a78bfa;">30–80 cm</span> &nbsp;Δ: <span id="depthDelta" style="color:#6ce000;">+0.0 cm</span>
+          </p>
+          <!-- Depth visual + range bar -->
+          <div style="display:flex;gap:10px;align-items:flex-end;margin-bottom:10px;">
+            <div>
+              <div class="depth-tank-sensor">HC-SR04</div>
+              <div class="depth-tank-body" style="height:64px;">
+                <div class="depth-sonar-beam" id="depthBeam" style="height:40px;"></div>
+                <div class="depth-tank-water" id="depthWater" style="height:40%;"></div>
+              </div>
+            </div>
+            <div style="flex:1;">
+              <div class="flex justify-between mb-1">
+                <span style="font-size:9px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;">0</span>
+                <span style="font-size:9px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;">120 cm</span>
+              </div>
+              <div class="range-track">
+                <div style="position:absolute;left:25%;width:46%;height:100%;background:rgba(124,58,237,0.12);border-radius:4px;"></div>
+                <div class="range-pointer depth-ring" id="depthRangePointer" style="background:#a78bfa;left:45%;"></div>
+              </div>
+              <div class="flex justify-between mt-1">
+                <span style="font-size:8px;color:#3a4a5a;font-family:'JetBrains Mono',monospace;">Empty</span>
+                <span style="font-size:8px;color:#a78bfa;font-family:'JetBrains Mono',monospace;">Optimal</span>
+                <span style="font-size:8px;color:#3a4a5a;font-family:'JetBrains Mono',monospace;">Overflow</span>
+              </div>
+            </div>
+          </div>
+          <!-- Mini stats row -->
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
+            <div style="background:#0d1319;border:1px solid #1e2830;border-radius:8px;padding:7px 8px;text-align:center;">
+              <p style="font-size:8px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;margin-bottom:2px;">MIN</p>
+              <p class="font-bold" style="color:#a78bfa;font-size:13px;" id="depthMin">-- cm</p>
+            </div>
+            <div style="background:#0d1319;border:1px solid #1e2830;border-radius:8px;padding:7px 8px;text-align:center;">
+              <p style="font-size:8px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;margin-bottom:2px;">MAX</p>
+              <p class="font-bold" style="color:#f59e0b;font-size:13px;" id="depthMax">-- cm</p>
+            </div>
+            <div style="background:#0d1319;border:1px solid #1e2830;border-radius:8px;padding:7px 8px;text-align:center;">
+              <p style="font-size:8px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;margin-bottom:2px;">AVG</p>
+              <p class="font-bold" style="color:#6ce000;font-size:13px;" id="depthAvg">-- cm</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TRIPLE LIVE CHARTS -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px;">
+
+        <!-- Temperature chart -->
+        <div class="stat-card anim-2" style="padding:14px;">
+          <div class="flex justify-between items-center mb-3">
+            <div>
+              <p style="font-size:12px;font-weight:700;">🌡 Temperature</p>
+              <p style="font-size:9px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;margin-top:1px;">60-second window</p>
+            </div>
+            <span class="badge badge-cyan">LIVE</span>
+          </div>
+          <div style="height:140px;"><canvas id="tempChart"></canvas></div>
+        </div>
+
+        <!-- pH chart -->
+        <div class="stat-card anim-2" style="animation-delay:0.15s;padding:14px;">
+          <div class="flex justify-between items-center mb-3">
+            <div>
+              <p style="font-size:12px;font-weight:700;">⚗️ pH Level</p>
+              <p style="font-size:9px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;margin-top:1px;">60-second window</p>
+            </div>
+            <span class="badge" style="background:rgba(108,224,0,0.1);color:#6ce000;">LIVE</span>
+          </div>
+          <div style="height:140px;"><canvas id="phChart"></canvas></div>
+        </div>
+
+        <!-- Depth chart -->
+        <div class="stat-card anim-2" style="animation-delay:0.3s;padding:14px;">
+          <div class="flex justify-between items-center mb-3">
+            <div>
+              <p style="font-size:12px;font-weight:700;">📡 Water Depth</p>
+              <p style="font-size:9px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;margin-top:1px;">60-second window</p>
+            </div>
+            <span class="badge" style="background:rgba(124,58,237,0.1);color:#a78bfa;">LIVE</span>
+          </div>
+          <div style="height:140px;"><canvas id="depthChart"></canvas></div>
+        </div>
+      </div>
+
+      <!-- ALERTS -->
+      <div class="stat-card anim-3" style="padding:14px;margin-bottom:12px;">
+        <p style="font-size:10px;font-weight:700;letter-spacing:0.08em;color:#5a6a7a;font-family:'JetBrains Mono',monospace;margin-bottom:10px;">SYSTEM ALERTS</p>
+        <div id="alertsList">
+          <div class="alert-row">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:6px;height:6px;border-radius:50%;background:#6ce000;flex-shrink:0;"></div>
+              <span style="font-size:12px;">Temperature within optimal range</span>
+            </div>
+            <span style="font-size:11px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;" id="alertTime1">--:--:--</span>
+          </div>
+          <div class="alert-row">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:6px;height:6px;border-radius:50%;background:#6ce000;flex-shrink:0;"></div>
+              <span style="font-size:12px;">Sensor probe calibrated · DS18B20</span>
+            </div>
+            <span style="font-size:11px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;">08:00:00</span>
+          </div>
+          <div class="alert-row" id="alertRow3" style="display:none;border-color:rgba(245,158,11,0.2);">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:6px;height:6px;border-radius:50%;background:#f59e0b;flex-shrink:0;"></div>
+              <span style="font-size:12px;color:#f59e0b;" id="alertMsg3">Temperature rising — monitor closely</span>
+            </div>
+            <span style="font-size:11px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;" id="alertTime3">--:--:--</span>
+          </div>
+          <div class="alert-row" id="alertRowPh" style="display:none;border-color:rgba(245,158,11,0.2);">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:6px;height:6px;border-radius:50%;background:#f59e0b;flex-shrink:0;"></div>
+              <span style="font-size:12px;color:#f59e0b;" id="alertMsgPh">pH level out of range</span>
+            </div>
+            <span style="font-size:11px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;" id="alertTimePh">--:--:--</span>
+          </div>
+          <div class="alert-row" id="alertRowDepth" style="display:none;border-color:rgba(124,58,237,0.25);">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:6px;height:6px;border-radius:50%;background:#a78bfa;flex-shrink:0;"></div>
+              <span style="font-size:12px;color:#a78bfa;" id="alertMsgDepth">Water depth out of range</span>
+            </div>
+            <span style="font-size:11px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;" id="alertTimeDepth">--:--:--</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════════════════════════════════
+           AQUAPONICS LIFE CYCLE SECTION
+      ══════════════════════════════════════════ -->
+      <div class="cycle-section reveal" id="aquaSection" style="margin-top:56px;">
+
+        <!-- Section header -->
+        <div style="max-width:860px;margin:0 auto 36px;">
+          <span class="cycle-title-badge">◎ System Biology</span>
+          <h2 style="font-size:28px;font-weight:800;margin:14px 0 8px;letter-spacing:-0.5px;">Aquaponics Nutrient Cycle</h2>
+          <p style="font-size:13px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;">How fish, bacteria, and plants work together in a closed-loop ecosystem</p>
+        </div>
+
+        <!-- ── CYCLE DIAGRAM (SVG) ── -->
+        <div class="cycle-diagram reveal" id="cycleDiagram">
+          <svg viewBox="0 0 860 480" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;">
+            <defs>
+              <!-- Arrow markers -->
+              <marker id="arr-amber" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                <path d="M0,0 L0,6 L8,3 z" fill="#f59e0b"/>
+              </marker>
+              <marker id="arr-cyan" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                <path d="M0,0 L0,6 L8,3 z" fill="#00daf3"/>
+              </marker>
+              <marker id="arr-green" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                <path d="M0,0 L0,6 L8,3 z" fill="#6ce000"/>
+              </marker>
+              <marker id="arr-red" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                <path d="M0,0 L0,6 L8,3 z" fill="#ff6464"/>
+              </marker>
+              <!-- Glow filters -->
+              <filter id="glow-cyan" x="-30%" y="-30%" width="160%" height="160%">
+                <feGaussianBlur stdDeviation="4" result="blur"/>
+                <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+              </filter>
+              <filter id="glow-green" x="-30%" y="-30%" width="160%" height="160%">
+                <feGaussianBlur stdDeviation="4" result="blur"/>
+                <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+              </filter>
+              <filter id="glow-amber" x="-30%" y="-30%" width="160%" height="160%">
+                <feGaussianBlur stdDeviation="3" result="blur"/>
+                <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+              </filter>
+              <!-- Flow gradient -->
+              <linearGradient id="flowAmber" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.2"/>
+                <stop offset="50%" stop-color="#f59e0b" stop-opacity="0.9"/>
+                <stop offset="100%" stop-color="#f59e0b" stop-opacity="0.2"/>
+              </linearGradient>
+              <linearGradient id="flowGreen" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#6ce000" stop-opacity="0.2"/>
+                <stop offset="50%" stop-color="#6ce000" stop-opacity="0.9"/>
+                <stop offset="100%" stop-color="#6ce000" stop-opacity="0.2"/>
+              </linearGradient>
+            </defs>
+
+            <!-- ─── BACKGROUND PANELS ─── -->
+            <!-- Fish tank zone -->
+            <rect x="20" y="290" width="820" height="170" rx="16" fill="rgba(0,218,243,0.03)" stroke="rgba(0,218,243,0.08)" stroke-width="1"/>
+            <text x="36" y="315" font-size="9" fill="#3a4a5a" font-family="JetBrains Mono" letter-spacing="2">FISH TANK</text>
+
+            <!-- Bio-filter zone -->
+            <rect x="260" y="80" width="220" height="160" rx="14" fill="rgba(245,158,11,0.04)" stroke="rgba(245,158,11,0.12)" stroke-width="1"/>
+            <text x="276" y="103" font-size="9" fill="#5a4a2a" font-family="JetBrains Mono" letter-spacing="2">BIO-FILTER</text>
+
+            <!-- Grow bed zone -->
+            <rect x="580" y="60" width="260" height="200" rx="14" fill="rgba(108,224,0,0.04)" stroke="rgba(108,224,0,0.12)" stroke-width="1"/>
+            <text x="596" y="83" font-size="9" fill="#3a5a2a" font-family="JetBrains Mono" letter-spacing="2">GROW BED</text>
+
+            <!-- ─── FLOW ARROWS ─── -->
+            <!-- 1. Fish → Ammonia (curved down-left) -->
+            <path d="M 130,310 C 90,310 60,340 60,370" stroke="#f59e0b" stroke-width="2" fill="none" stroke-dasharray="6,4" marker-end="url(#arr-amber)" opacity="0.7"/>
+
+            <!-- 2. Ammonia → Nitrosomonas (up-right curve) -->
+            <path d="M 130,355 C 200,330 240,220 290,190" stroke="#f59e0b" stroke-width="2.5" fill="none" stroke-dasharray="8,4" marker-end="url(#arr-amber)" filter="url(#glow-amber)" opacity="0.85">
+              <animate attributeName="stroke-dashoffset" from="200" to="0" dur="3s" repeatCount="indefinite"/>
+            </path>
+
+            <!-- 3. Nitrosomonas → Nitrites label area -->
+            <path d="M 370,170 L 430,230" stroke="#f59e0b" stroke-width="2" fill="none" stroke-dasharray="5,4" marker-end="url(#arr-amber)" opacity="0.7"/>
+
+            <!-- 4. Nitrobacter → Nitrates (right) -->
+            <path d="M 460,145 C 510,145 540,130 570,120" stroke="#6ce000" stroke-width="2.5" fill="none" stroke-dasharray="8,4" marker-end="url(#arr-green)" filter="url(#glow-green)" opacity="0.9">
+              <animate attributeName="stroke-dashoffset" from="200" to="0" dur="2.5s" repeatCount="indefinite"/>
+            </path>
+
+            <!-- 5. Grow bed → Plants (up) already in grow bed zone -->
+            <!-- 6. Plants clean water → back to fish tank (right side down) -->
+            <path d="M 780,260 C 780,300 750,330 700,340" stroke="#00daf3" stroke-width="2.5" fill="none" stroke-dasharray="8,4" marker-end="url(#arr-cyan)" filter="url(#glow-cyan)" opacity="0.9">
+              <animate attributeName="stroke-dashoffset" from="200" to="0" dur="2.8s" repeatCount="indefinite"/>
+            </path>
+
+            <!-- 7. Clean water returns along bottom (right→left) -->
+            <path d="M 700,390 C 600,400 400,400 200,390" stroke="#00daf3" stroke-width="2" fill="none" stroke-dasharray="6,4" marker-end="url(#arr-cyan)" opacity="0.6"/>
+
+            <!-- 8. Pump returns water to fish (bottom left) -->
+            <path d="M 130,390 L 130,340" stroke="#00daf3" stroke-width="2" fill="none" stroke-dasharray="5,4" marker-end="url(#arr-cyan)" opacity="0.6"/>
+
+            <!-- ─── NODE 1: FISH 🐟 ─── -->
+            <g class="cycle-node" transform="translate(130,330)">
+              <circle class="node-ring" r="50" fill="rgba(0,218,243,0.06)" stroke="rgba(0,218,243,0.25)" stroke-width="1.5"/>
+              <circle r="38" fill="#0d1a24" stroke="#00daf3" stroke-width="1.5" filter="url(#glow-cyan)"/>
+              <text x="0" y="6" text-anchor="middle" font-size="26">🐟</text>
+              <text x="0" y="64" text-anchor="middle" font-size="10" fill="#00daf3" font-family="JetBrains Mono" letter-spacing="1" font-weight="bold">FISH</text>
+              <text x="0" y="77" text-anchor="middle" font-size="8.5" fill="#5a6a7a" font-family="JetBrains Mono">Eat · Grow · Excrete</text>
+            </g>
+
+            <!-- ─── NODE 2: AMMONIA ─── -->
+            <g class="cycle-node" transform="translate(60,400)">
+              <circle class="node-ring" r="38" fill="rgba(245,158,11,0.07)" stroke="rgba(245,158,11,0.3)" stroke-width="1.5"/>
+              <circle r="28" fill="#1a1200" stroke="#f59e0b" stroke-width="1.5" filter="url(#glow-amber)"/>
+              <text x="0" y="5" text-anchor="middle" font-size="18">⚗️</text>
+              <text x="0" y="50" text-anchor="middle" font-size="9" fill="#f59e0b" font-family="JetBrains Mono" letter-spacing="0.5" font-weight="bold">AMMONIA</text>
+              <text x="0" y="61" text-anchor="middle" font-size="7.5" fill="#5a6a7a" font-family="JetBrains Mono">NH₃ / NH₄⁺</text>
+            </g>
+
+            <!-- ─── NODE 3: NITROSOMONAS (bacteria 1) ─── -->
+            <g class="cycle-node" transform="translate(310,165)">
+              <circle class="node-ring" r="42" fill="rgba(245,158,11,0.06)" stroke="rgba(245,158,11,0.25)" stroke-width="1.5"/>
+              <circle r="32" fill="#140f00" stroke="#f59e0b" stroke-width="1.5"/>
+              <text x="0" y="6" text-anchor="middle" font-size="22">🦠</text>
+              <text x="0" y="54" text-anchor="middle" font-size="8.5" fill="#f59e0b" font-family="JetBrains Mono" letter-spacing="0.3" font-weight="bold">NITROSOMONAS</text>
+              <text x="0" y="65" text-anchor="middle" font-size="7.5" fill="#5a6a7a" font-family="JetBrains Mono">NH₃ → NO₂⁻</text>
+            </g>
+
+            <!-- ─── NITRITES LABEL (midpoint) ─── -->
+            <g transform="translate(420,240)">
+              <rect x="-52" y="-16" width="104" height="28" rx="8" fill="rgba(245,158,11,0.1)" stroke="rgba(245,158,11,0.3)" stroke-width="1"/>
+              <text x="0" y="3" text-anchor="middle" font-size="9.5" fill="#f59e0b" font-family="JetBrains Mono" font-weight="bold">NITRITES (NO₂⁻)</text>
+            </g>
+
+            <!-- ─── NODE 4: NITROBACTER (bacteria 2) ─── -->
+            <g class="cycle-node" transform="translate(440,140)">
+              <circle class="node-ring" r="42" fill="rgba(108,224,0,0.06)" stroke="rgba(108,224,0,0.25)" stroke-width="1.5"/>
+              <circle r="32" fill="#0a1400" stroke="#6ce000" stroke-width="1.5"/>
+              <text x="0" y="6" text-anchor="middle" font-size="22">🧫</text>
+              <text x="0" y="54" text-anchor="middle" font-size="8.5" fill="#6ce000" font-family="JetBrains Mono" letter-spacing="0.3" font-weight="bold">NITROBACTER</text>
+              <text x="0" y="65" text-anchor="middle" font-size="7.5" fill="#5a6a7a" font-family="JetBrains Mono">NO₂⁻ → NO₃⁻</text>
+            </g>
+
+            <!-- ─── NODE 5: PLANTS 🌿 ─── -->
+            <g class="cycle-node" transform="translate(710,155)">
+              <circle class="node-ring" r="52" fill="rgba(108,224,0,0.06)" stroke="rgba(108,224,0,0.3)" stroke-width="1.5"/>
+              <circle r="40" fill="#061200" stroke="#6ce000" stroke-width="2" filter="url(#glow-green)"/>
+              <text x="0" y="7" text-anchor="middle" font-size="28">🌿</text>
+              <text x="0" y="65" text-anchor="middle" font-size="10" fill="#6ce000" font-family="JetBrains Mono" letter-spacing="1" font-weight="bold">PLANTS</text>
+              <text x="0" y="77" text-anchor="middle" font-size="7.5" fill="#5a6a7a" font-family="JetBrains Mono">Absorb NO₃⁻ · Purify</text>
+            </g>
+
+            <!-- ─── NODE 6: CLEAN WATER ─── -->
+            <g class="cycle-node" transform="translate(710,360)">
+              <circle class="node-ring" r="40" fill="rgba(0,218,243,0.06)" stroke="rgba(0,218,243,0.25)" stroke-width="1.5"/>
+              <circle r="30" fill="#001a1a" stroke="#00daf3" stroke-width="1.5" filter="url(#glow-cyan)"/>
+              <text x="0" y="6" text-anchor="middle" font-size="20">💧</text>
+              <text x="0" y="52" text-anchor="middle" font-size="9" fill="#00daf3" font-family="JetBrains Mono" letter-spacing="0.5" font-weight="bold">CLEAN WATER</text>
+              <text x="0" y="63" text-anchor="middle" font-size="7.5" fill="#5a6a7a" font-family="JetBrains Mono">Returns to tank</text>
+            </g>
+
+            <!-- ─── STEP NUMBERS ─── -->
+            <g font-family="JetBrains Mono" font-size="9" font-weight="bold">
+              <circle cx="100" cy="355" r="9" fill="#f59e0b" opacity="0.9"/>
+              <text x="100" y="359" text-anchor="middle" fill="#0a0f14">1</text>
+
+              <circle cx="205" cy="262" r="9" fill="#f59e0b" opacity="0.9"/>
+              <text x="205" y="266" text-anchor="middle" fill="#0a0f14">2</text>
+
+              <circle cx="400" cy="163" r="9" fill="#f59e0b" opacity="0.9"/>
+              <text x="400" y="167" text-anchor="middle" fill="#0a0f14">3</text>
+
+              <circle cx="515" cy="135" r="9" fill="#6ce000" opacity="0.9"/>
+              <text x="515" y="139" text-anchor="middle" fill="#0a0f14">4</text>
+
+              <circle cx="770" cy="290" r="9" fill="#00daf3" opacity="0.9"/>
+              <text x="770" y="294" text-anchor="middle" fill="#0a0f14">5</text>
+
+              <circle cx="400" cy="405" r="9" fill="#00daf3" opacity="0.9"/>
+              <text x="400" y="409" text-anchor="middle" fill="#0a0f14">6</text>
+            </g>
+
+            <!-- ─── FLOW LABELS ─── -->
+            <g font-family="JetBrains Mono" font-size="8" fill="#5a6a7a">
+              <text x="155" y="297">Fish waste → NH₃</text>
+              <text x="155" y="235">Bacteria convert</text>
+              <text x="340" y="210">NO₂⁻ produced</text>
+              <text x="490" y="105">NO₃⁻ (nitrates)</text>
+              <text x="615" y="310">Filtered water</text>
+              <text x="310" y="420">Recirculated to tank</text>
+            </g>
+          </svg>
+        </div>
+
+        <!-- ── STEP LEGEND PILLS ── -->
+        <div style="max-width:860px;margin:0 auto 48px;display:flex;flex-wrap:wrap;gap:10px;" class="reveal">
+          <div style="display:flex;align-items:center;gap:8px;background:#111820;border:1px solid #1e2830;border-radius:10px;padding:8px 14px;">
+            <span style="width:8px;height:8px;border-radius:50%;background:#f59e0b;flex-shrink:0;"></span>
+            <span style="font-size:11px;font-family:'JetBrains Mono',monospace;color:#5a6a7a;">1 · Fish excrete ammonia (NH₃)</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;background:#111820;border:1px solid #1e2830;border-radius:10px;padding:8px 14px;">
+            <span style="width:8px;height:8px;border-radius:50%;background:#f59e0b;flex-shrink:0;"></span>
+            <span style="font-size:11px;font-family:'JetBrains Mono',monospace;color:#5a6a7a;">2 · Nitrosomonas convert NH₃ → NO₂⁻</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;background:#111820;border:1px solid #1e2830;border-radius:10px;padding:8px 14px;">
+            <span style="width:8px;height:8px;border-radius:50%;background:#f59e0b;flex-shrink:0;"></span>
+            <span style="font-size:11px;font-family:'JetBrains Mono',monospace;color:#5a6a7a;">3 · Nitrites (NO₂⁻) pass to Nitrobacter</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;background:#111820;border:1px solid #1e2830;border-radius:10px;padding:8px 14px;">
+            <span style="width:8px;height:8px;border-radius:50%;background:#6ce000;flex-shrink:0;"></span>
+            <span style="font-size:11px;font-family:'JetBrains Mono',monospace;color:#5a6a7a;">4 · Nitrobacter convert NO₂⁻ → NO₃⁻ (plant food)</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;background:#111820;border:1px solid #1e2830;border-radius:10px;padding:8px 14px;">
+            <span style="width:8px;height:8px;border-radius:50%;background:#00daf3;flex-shrink:0;"></span>
+            <span style="font-size:11px;font-family:'JetBrains Mono',monospace;color:#5a6a7a;">5 · Plants absorb nitrates, purify water</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;background:#111820;border:1px solid #1e2830;border-radius:10px;padding:8px 14px;">
+            <span style="width:8px;height:8px;border-radius:50%;background:#00daf3;flex-shrink:0;"></span>
+            <span style="font-size:11px;font-family:'JetBrains Mono',monospace;color:#5a6a7a;">6 · Clean water recirculates back to fish</span>
+          </div>
+        </div>
+
+        <!-- ── INTRODUCTION TEXT ── -->
+        <div class="intro-section reveal">
+          <div class="intro-card">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:28px;">
+              <div style="width:40px;height:40px;border-radius:12px;background:rgba(108,224,0,0.1);border:1px solid rgba(108,224,0,0.25);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">🌱</div>
+              <div>
+                <h3 style="font-size:18px;font-weight:800;margin:0 0 3px;">What is Aquaponics?</h3>
+                <span style="font-size:10px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;letter-spacing:0.08em;">THE SCIENCE BEHIND THE LIVING LAB</span>
+              </div>
+            </div>
+
+            <p class="intro-para">
+              Aquaponics is a <span class="intro-highlight">closed-loop food production system</span> that combines conventional aquaculture — the raising of fish in tanks — with hydroponics, the cultivation of plants in water. By linking these two systems together, aquaponics creates a self-sustaining ecosystem where every organism plays a vital role in keeping the environment balanced and productive.
+            </p>
+            <p class="intro-para">
+              The process begins with the fish. As fish feed and grow, they naturally excrete <span class="intro-amber">ammonia (NH₃)</span> through their gills and waste. In a traditional fish tank, this ammonia would accumulate and quickly become toxic — but in an aquaponics system, it becomes the engine that drives the entire biological cycle.
+            </p>
+            <p class="intro-para">
+              The ammonia-rich water flows into a <span class="intro-highlight">bio-filter</span>, where colonies of naturally occurring bacteria take over. <span class="intro-amber">Nitrosomonas</span> bacteria are the first to act — they oxidise ammonia into nitrites (NO₂⁻). While nitrites are still toxic to fish at high concentrations, a second group of bacteria, <span class="intro-green">Nitrobacter</span>, quickly converts them further into nitrates (NO₃⁻), which are far less harmful and, crucially, an excellent fertiliser for plants.
+            </p>
+            <p class="intro-para">
+              The nitrate-laden water is then pumped up into the <span class="intro-green">grow beds</span>, where plant roots are suspended directly in the nutrient stream. Crops like leafy greens, herbs, tomatoes, and even fruiting vegetables absorb the nitrates as their primary source of nitrogen — the key building block for growth. As the plants absorb these nutrients, they simultaneously <span class="intro-highlight">filter and purify the water</span>, stripping it of the compounds that would otherwise harm the fish.
+            </p>
+            <p class="intro-para">
+              This cleaned water is then <span class="intro-highlight">recirculated back into the fish tank</span>, completing the loop. The entire cycle repeats continuously, 24 hours a day. The result is a system that uses up to <span class="intro-green">90% less water</span> than conventional agriculture, produces zero chemical runoff, and yields both protein (fish) and vegetables from the same footprint of land and energy.
+            </p>
+            <p class="intro-para">
+              What makes aquaponics particularly powerful is its <span class="intro-highlight">biological resilience</span>. The microbial communities that form in a mature system are self-regulating — they expand when ammonia levels rise and stabilise as balance is restored. Maintaining the right temperature, pH, dissolved oxygen, and stocking density are the primary levers that operators manage. This is why real-time sensor monitoring, like the temperature probe connected to this dashboard, is not just useful — it is essential to keeping the entire living system healthy.
+            </p>
+
+            <!-- Stat pills row -->
+            <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:28px;padding-top:24px;border-top:1px solid #1e2830;">
+              <div style="background:#0d1319;border:1px solid rgba(108,224,0,0.2);border-radius:12px;padding:12px 18px;text-align:center;min-width:110px;">
+                <p style="font-size:20px;font-weight:800;color:#6ce000;margin:0;">90%</p>
+                <p style="font-size:9px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;margin-top:3px;">LESS WATER</p>
+              </div>
+              <div style="background:#0d1319;border:1px solid rgba(0,218,243,0.2);border-radius:12px;padding:12px 18px;text-align:center;min-width:110px;">
+                <p style="font-size:20px;font-weight:800;color:#00daf3;margin:0;">0</p>
+                <p style="font-size:9px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;margin-top:3px;">CHEMICAL RUNOFF</p>
+              </div>
+              <div style="background:#0d1319;border:1px solid rgba(245,158,11,0.2);border-radius:12px;padding:12px 18px;text-align:center;min-width:110px;">
+                <p style="font-size:20px;font-weight:800;color:#f59e0b;margin:0;">2×</p>
+                <p style="font-size:9px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;margin-top:3px;">DUAL HARVEST</p>
+              </div>
+              <div style="background:#0d1319;border:1px solid rgba(108,224,0,0.2);border-radius:12px;padding:12px 18px;text-align:center;min-width:140px;">
+                <p style="font-size:20px;font-weight:800;color:#6ce000;margin:0;">24/7</p>
+                <p style="font-size:9px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;margin-top:3px;">SELF-SUSTAINING CYCLE</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </main>
+  </div>
+
+<script>
+// Live clock
+function updateClock() {
+  const now = new Date();
+  const t = now.toUTCString().split(' ')[4] + ' UTC';
+  document.getElementById('live-time').textContent = t;
+  document.getElementById('alertTime1').textContent = t.split(' ')[0];
+}
+setInterval(updateClock, 1000); updateClock();
+
+// Chart setup
+Chart.defaults.color = '#5a6a7a';
+Chart.defaults.borderColor = '#1e2830';
+Chart.defaults.font.family = 'JetBrains Mono';
+Chart.defaults.font.size = 10;
+
+const maxPoints = 60;
+const labels = Array.from({length: maxPoints}, (_,i) => i === maxPoints-1 ? 'now' : `-${maxPoints-1-i}s`);
+
+// ── TEMPERATURE CHART ──
+let tempHistory = Array.from({length: maxPoints}, () => null); // filled by live sensor
+const tempChartInst = new Chart(document.getElementById('tempChart'), {
+  type: 'line',
+  data: {
+    labels,
+    datasets: [{
+      label: 'Temp °C',
+      data: [...tempHistory],
+      borderColor: '#00daf3',
+      backgroundColor: (ctx) => {
+        const g = ctx.chart.ctx.createLinearGradient(0,0,0,180);
+        g.addColorStop(0,'rgba(0,218,243,0.18)');
+        g.addColorStop(1,'rgba(0,218,243,0)');
+        return g;
+      },
+      fill: true, tension: 0.4, pointRadius: 0, borderWidth: 2.5
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false, animation: false,
+    plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.y}°C` } } },
+    scales: {
+      x: { grid: { color: '#1a222a' }, ticks: { maxTicksLimit: 8 } },
+      y: { grid: { color: '#1a222a' }, min: 22, max: 36, ticks: { maxTicksLimit: 5, callback: v => v+'°C' } }
+    }
+  }
+});
+
+// ── pH CHART ──
+let phHistory = Array.from({length: maxPoints}, () => parseFloat((7.0 + (Math.random()-0.5)*0.6).toFixed(2)));
+const phChartInst = new Chart(document.getElementById('phChart'), {
+  type: 'line',
+  data: {
+    labels,
+    datasets: [{
+      label: 'pH',
+      data: [...phHistory],
+      borderColor: '#6ce000',
+      backgroundColor: (ctx) => {
+        const g = ctx.chart.ctx.createLinearGradient(0,0,0,180);
+        g.addColorStop(0,'rgba(108,224,0,0.18)');
+        g.addColorStop(1,'rgba(108,224,0,0)');
+        return g;
+      },
+      fill: true, tension: 0.4, pointRadius: 0, borderWidth: 2.5
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false, animation: false,
+    plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` pH ${ctx.parsed.y}` } } },
+    scales: {
+      x: { grid: { color: '#1a222a' }, ticks: { maxTicksLimit: 8 } },
+      y: { grid: { color: '#1a222a' }, min: 4, max: 10, ticks: { maxTicksLimit: 5, callback: v => 'pH '+v } }
+    }
+  }
+});
+
+let sensorOn = true;
+let currentTemp = null;
+let prevTemp = null;
+let currentPh = 7.2;
+let prevPh = 7.2;
+let currentDepth = 50.0;
+let prevDepth = 50.0;
+
+// ── DEPTH CHART ──
+let depthHistory = Array.from({length: maxPoints}, () => null); // filled by live sensor
+const depthChartInst = new Chart(document.getElementById('depthChart'), {
+  type: 'line',
+  data: {
+    labels,
+    datasets: [{
+      label: 'Depth cm',
+      data: [...depthHistory],
+      borderColor: '#a78bfa',
+      backgroundColor: (ctx) => {
+        const g = ctx.chart.ctx.createLinearGradient(0,0,0,140);
+        g.addColorStop(0,'rgba(124,58,237,0.22)');
+        g.addColorStop(1,'rgba(124,58,237,0)');
+        return g;
+      },
+      fill: true, tension: 0.4, pointRadius: 0, borderWidth: 2.5
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false, animation: false,
+    plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${ctx.parsed.y} cm` } } },
+    scales: {
+      x: { grid: { color: '#1a222a' }, ticks: { maxTicksLimit: 8 } },
+      y: { grid: { color: '#1a222a' }, min: 0, max: 120, ticks: { maxTicksLimit: 5, callback: v => v+' cm' } }
+    }
+  }
+});
+
+function getTempStatus(t) {
+  if (t < 22) return { label:'COLD',     color:'#64b5ff', badgeStyle:'background:rgba(100,181,255,0.15);color:#64b5ff' };
+  if (t < 24) return { label:'LOW',      color:'#f59e0b', badgeStyle:'background:rgba(245,158,11,0.15);color:#f59e0b' };
+  if (t <= 32) return { label:'OPTIMAL', color:'#6ce000', badgeStyle:'background:rgba(108,224,0,0.15);color:#6ce000' };
+  if (t <= 35) return { label:'HIGH',    color:'#f59e0b', badgeStyle:'background:rgba(245,158,11,0.15);color:#f59e0b' };
+  return { label:'CRITICAL', color:'#ff6464', badgeStyle:'background:rgba(255,100,100,0.15);color:#ff6464' };
+}
+
+function getPhStatus(ph) {
+  if (ph < 5.5) return { label:'ACIDIC',   color:'#ff6464', badgeStyle:'background:rgba(255,100,100,0.15);color:#ff6464' };
+  if (ph < 6.5) return { label:'LOW pH',   color:'#f59e0b', badgeStyle:'background:rgba(245,158,11,0.15);color:#f59e0b' };
+  if (ph <= 8.0) return { label:'OPTIMAL', color:'#6ce000', badgeStyle:'background:rgba(108,224,0,0.15);color:#6ce000' };
+  if (ph <= 9.0) return { label:'HIGH pH', color:'#f59e0b', badgeStyle:'background:rgba(245,158,11,0.15);color:#f59e0b' };
+  return { label:'ALKALINE', color:'#7c3aed', badgeStyle:'background:rgba(124,58,237,0.15);color:#7c3aed' };
+}
+
+function getDepthStatus(d) {
+  if (d < 15)  return { label:'CRITICAL',  color:'#ff6464', badgeStyle:'background:rgba(255,100,100,0.15);color:#ff6464' };
+  if (d < 30)  return { label:'LOW',       color:'#f59e0b', badgeStyle:'background:rgba(245,158,11,0.15);color:#f59e0b' };
+  if (d <= 80) return { label:'NORMAL',    color:'#a78bfa', badgeStyle:'background:rgba(124,58,237,0.15);color:#a78bfa' };
+  if (d <= 95) return { label:'HIGH',      color:'#f59e0b', badgeStyle:'background:rgba(245,158,11,0.15);color:#f59e0b' };
+  return { label:'OVERFLOW', color:'#ff6464', badgeStyle:'background:rgba(255,100,100,0.15);color:#ff6464' };
+}
+
+function updateTempUI(t) {
+  if (!sensorOn) return;
+
+  document.getElementById('temp-display').textContent = t.toFixed(1);
+  localStorage.setItem('aqua_current_temp', t.toFixed(1));
+
+  const tStatus = getTempStatus(t);
+  const tBadge = document.getElementById('tempBadge');
+  tBadge.textContent = tStatus.label;
+  tBadge.style.cssText = `font-size:11px;padding:2px 10px;border-radius:20px;font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:0.05em;${tStatus.badgeStyle}`;
+
+  const tDelta = prevTemp !== null ? (t - prevTemp) : 0;
+  const tDeltaEl = document.getElementById('tempDelta');
+  tDeltaEl.textContent = (tDelta >= 0 ? '+' : '') + tDelta.toFixed(1) + '°C';
+  tDeltaEl.style.color = tDelta > 0.3 ? '#f59e0b' : tDelta < -0.3 ? '#64b5ff' : '#6ce000';
+
+  const tPtr = Math.max(1, Math.min(97, ((t - 20) / 20) * 100));
+  document.getElementById('rangePointer').style.left = tPtr + '%';
+  document.getElementById('rangePointer').style.background = tStatus.color;
+
+  tempHistory.push(t);
+  if (tempHistory.length > maxPoints) tempHistory.shift();
+  tempChartInst.data.datasets[0].data = [...tempHistory];
+  tempChartInst.data.datasets[0].borderColor = tStatus.color;
+  tempChartInst.update('none');
+
+  const validTemps = tempHistory.filter(v => v !== null);
+  const tMn = validTemps.length ? Math.min(...validTemps).toFixed(1) : '---';
+  const tMx = validTemps.length ? Math.max(...validTemps).toFixed(1) : '---';
+  const tAv = validTemps.length ? (validTemps.reduce((a,b)=>a+b,0)/validTemps.length).toFixed(1) : '---';
+  document.getElementById('tempMin').textContent = validTemps.length ? tMn + '°C' : '---';
+  document.getElementById('tempMax').textContent = validTemps.length ? tMx + '°C' : '---';
+  document.getElementById('tempAvg').textContent = validTemps.length ? tAv + '°C' : '---';
+
+  const alertRow3 = document.getElementById('alertRow3');
+  if (t > 31) {
+    alertRow3.style.display = 'flex';
+    document.getElementById('alertMsg3').textContent = t > 34 ? '⚠ Critical temperature — take action!' : 'Temperature rising — monitor closely';
+    document.getElementById('alertTime3').textContent = new Date().toTimeString().split(' ')[0];
+  } else {
+    alertRow3.style.display = 'none';
+  }
+}
+
+function updateDashboard() {
+  if (!sensorOn) return;
+
+  // ── pH (random simulation — no physical sensor) ──
+  prevPh = currentPh;
+  // Smooth random walk around 7.0–7.5 optimal zone
+  currentPh = Math.max(4.5, Math.min(9.5, currentPh + (Math.random() - 0.5) * 0.08));
+  const ph = parseFloat(currentPh.toFixed(2));
+
+  document.getElementById('ph-display').textContent = ph.toFixed(1);
+  localStorage.setItem('aqua_current_ph', ph.toFixed(2));
+
+  const phStatus = getPhStatus(ph);
+  const phBadge = document.getElementById('phBadge');
+  phBadge.textContent = phStatus.label;
+  phBadge.style.cssText = `font-size:11px;padding:2px 10px;border-radius:20px;font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:0.05em;${phStatus.badgeStyle}`;
+
+  const phDelta = ph - prevPh;
+  const phDeltaEl = document.getElementById('phDelta');
+  phDeltaEl.textContent = (phDelta >= 0 ? '+' : '') + phDelta.toFixed(2);
+  phDeltaEl.style.color = Math.abs(phDelta) > 0.05 ? '#f59e0b' : '#6ce000';
+
+  // pH gauge pointer: 4→10 maps to 0→100%
+  const phPtr = Math.max(1, Math.min(99, ((ph - 4) / 6) * 100));
+  document.getElementById('phGaugePointer').style.left = phPtr + '%';
+
+  phHistory.push(ph);
+  if (phHistory.length > maxPoints) phHistory.shift();
+  phChartInst.data.datasets[0].data = [...phHistory];
+  phChartInst.data.datasets[0].borderColor = phStatus.color;
+  phChartInst.update('none');
+
+  const phMn = Math.min(...phHistory).toFixed(2);
+  const phMx = Math.max(...phHistory).toFixed(2);
+  const phAv = (phHistory.reduce((a,b)=>a+b,0)/phHistory.length).toFixed(2);
+  document.getElementById('phMin').textContent = phMn;
+  document.getElementById('phMax').textContent = phMx;
+  document.getElementById('phAvg').textContent = phAv;
+
+  const alertRowPh = document.getElementById('alertRowPh');
+  if (ph < 6.5 || ph > 8.0) {
+    alertRowPh.style.display = 'flex';
+    const msg = ph < 6.5
+      ? `⚗️ pH ${ph.toFixed(1)} — Too acidic, check buffer system`
+      : `⚗️ pH ${ph.toFixed(1)} — Too alkaline, monitor closely`;
+    document.getElementById('alertMsgPh').textContent = msg;
+    alertRowPh.style.borderColor = ph < 5.5 || ph > 9 ? 'rgba(255,100,100,0.3)' : 'rgba(245,158,11,0.2)';
+    document.getElementById('alertTimePh').textContent = new Date().toTimeString().split(' ')[0];
+  } else {
+    alertRowPh.style.display = 'none';
+  }
+
+  // ── ULTRASONIC DEPTH: driven by fetchLiveDepth() below ──
+  // Random simulation removed. Live readings come from /api/depth.
+}
+
+function toggleSensor(on) {
+  sensorOn = on;
+  if (!on) {
+    document.getElementById('temp-display').textContent = '--.-';
+    document.getElementById('ph-display').textContent = '-.-';
+    document.getElementById('depth-display').textContent = '--.-';
+    const offStyle = 'font-size:10px;padding:2px 10px;border-radius:20px;font-family:JetBrains Mono,monospace;text-transform:uppercase;letter-spacing:0.05em;background:rgba(90,106,122,0.2);color:#5a6a7a';
+    document.getElementById('tempBadge').textContent = 'OFFLINE';
+    document.getElementById('tempBadge').style.cssText = offStyle;
+    document.getElementById('phBadge').textContent = 'OFFLINE';
+    document.getElementById('phBadge').style.cssText = offStyle;
+    document.getElementById('depthBadge').textContent = 'OFFLINE';
+    document.getElementById('depthBadge').style.cssText = offStyle;
+    document.getElementById('sensorStatusBadge').textContent = 'Offline';
+    document.getElementById('sensorStatusBadge').className = 'badge badge-warn';
+  } else {
+    document.getElementById('sensorStatusBadge').textContent = 'Active';
+    document.getElementById('sensorStatusBadge').className = 'badge badge-ok';
+  }
+}
+
+setInterval(updateDashboard, 1200);
+updateDashboard();
+
+// ══════════════════════════════════════════════════════════
+//  FISH & PLANT COMBO RECOMMENDER
+//  Fish data  → read from list.html's fishData (via localStorage)
+//  Plant data → read from aquaponics.html's plants (via localStorage)
+//  Images     → assets/ for fish, plants/ for plants
+// ══════════════════════════════════════════════════════════
+
+// ── FISH: embedded from list.html (same source of truth) ──
+// temp.min/max stored as strings like "24°C" → parse to float
+const FISH_DB = [
+  {name:'Rohu',          img:'assets/rohu.png',          tempMin:24, tempMax:32, phMin:7.0, phMax:8.5, note:'Fast-growing South Asian carp, ideal for warm pond systems. High survival rate.'},
+  {name:'Tilapia',       img:'assets/tilapia.png',       tempMin:20, tempMax:35, phMin:6.5, phMax:8.5, note:'Hardy and adaptable. Tolerates low O₂ and wide pH. Watch for fin rot.'},
+  {name:'Catla',         img:'assets/catla.png',         tempMin:18, tempMax:32, phMin:7.0, phMax:8.5, note:'Premium surface feeder. Rapid growth, excellent flesh quality.'},
+  {name:'Mrigal',        img:'assets/mrigal.png',        tempMin:24, tempMax:30, phMin:6.5, phMax:8.0, note:'Bottom feeder, ideal in polyculture. Hardy and fast-growing.'},
+  {name:'Common Carp',   img:'assets/common_carp.png',   tempMin:20, tempMax:30, phMin:6.0, phMax:9.0, note:'Very hardy, wide pH tolerance. High nutrient output for plants.'},
+  {name:'Grass Carp',    img:'assets/grass_carp.png',    tempMin:20, tempMax:30, phMin:6.5, phMax:8.0, note:'Herbivore, helps control aquatic weeds. Fast growth rate.'},
+  {name:'Silver Carp',   img:'assets/silver_carp.png',   tempMin:20, tempMax:30, phMin:6.5, phMax:8.0, note:'Plankton feeder, improves water clarity. Good polyculture fish.'},
+  {name:'Pangasius',     img:'assets/pangasius.png',     tempMin:25, tempMax:32, phMin:6.5, phMax:8.0, note:'Ultra-fast commercial growth. Warm water tropical species.'},
+  {name:'Singhi (Catfish)',img:'assets/singhi.png',      tempMin:24, tempMax:30, phMin:6.0, phMax:8.0, note:'Air-breathing catfish. Survives low oxygen. Very hardy.'},
+  {name:'Freshwater Prawn',img:'assets/freshwater_prawn.png', tempMin:25, tempMax:31, phMin:7.0, phMax:8.0, note:'High-value aquaculture species. Needs warm, clean water.'},
+  {name:'Climbing Perch', img:'assets/climbing_perch.png', tempMin:24, tempMax:30, phMin:6.0, phMax:8.0, note:'Extreme survivor. Air-breather tolerating very low DO.'},
+  {name:'Bata Fish',     img:'assets/bata_fish.png',     tempMin:24, tempMax:30, phMin:6.5, phMax:8.0, note:'Small carp, easy to culture. Good for mixed ponds.'},
+  {name:'Mystus Catfish',img:'assets/mystus_catfish.png',tempMin:24, tempMax:30, phMin:6.0, phMax:8.0, note:'Nocturnal bottom feeder. Good scavenger for pond cleanup.'},
+  {name:'Puntius',       img:'assets/puntius.png',       tempMin:22, tempMax:30, phMin:6.0, phMax:8.0, note:'Small barb, active swimmer. Good for mixed culture systems.'},
+];
+
+// ── PLANTS: embedded from aquaponics.html (same source of truth) ──
+// ph/temp stored as "6.0 – 7.5" / "15 – 25°C" → parse first number as min, second as max
+const PLANT_DB = [
+  {name:'Spinach',      img:'plants/spinach.png',      tempMin:15, tempMax:25, phMin:6.0, phMax:7.5, note:'Fast leafy green. Excellent nitrate absorber. High market value.'},
+  {name:'Kangkong',     img:'plants/kangkong.png',     tempMin:25, tempMax:35, phMin:6.0, phMax:7.5, note:'Native Asian green. Aggressive grower, handles high ammonia.'},
+  {name:'Amaranth',     img:'plants/amaranth.png',     tempMin:25, tempMax:35, phMin:6.0, phMax:7.5, note:'Nutritious leafy green. Multiple harvests, warm-season crop.'},
+  {name:'Moringa',      img:'plants/moringa.png',      tempMin:25, tempMax:35, phMin:6.5, phMax:7.5, note:'Premium nutritional crop. Deep roots, high economic value.'},
+  {name:'Tomato',       img:'plants/tomato.png',       tempMin:20, tempMax:30, phMin:5.8, phMax:6.8, note:'High-value fruit crop. Loves warmth, needs strong nutrient flow.'},
+  {name:'Brinjal',      img:'plants/brinjal.png',      tempMin:22, tempMax:32, phMin:6.0, phMax:7.0, note:'Warm-season fruiting vegetable. Good yield in aquaponics.'},
+  {name:'Okra',         img:'plants/okra.png',         tempMin:24, tempMax:35, phMin:6.0, phMax:7.0, note:'Heat-loving crop. Productive and easy to grow in warm systems.'},
+  {name:'Chilli',       img:'plants/chilli.png',       tempMin:24, tempMax:35, phMin:5.5, phMax:6.8, note:'High-value spice crop. Needs warm conditions and full sun.'},
+  {name:'Capsicum',     img:'plants/capsicum.png',     tempMin:25, tempMax:35, phMin:6.0, phMax:7.0, note:'Bell pepper. Warm season fruiting crop with good market value.'},
+  {name:'Bitter Gourd', img:'plants/bitter_gourd.png', tempMin:25, tempMax:38, phMin:6.0, phMax:7.0, note:'Fast-climbing vine. Heat-tolerant, high Indian market demand.'},
+  {name:'Bottle Gourd', img:'plants/bottle_gourd.png', tempMin:25, tempMax:35, phMin:6.0, phMax:7.0, note:'Prolific fruiting vine. Excellent performance in warm systems.'},
+  {name:'Coriander',    img:'plants/coriander.png',    tempMin:18, tempMax:28, phMin:6.0, phMax:7.5, note:'Cool-season herb. Fast cycle, high kitchen demand.'},
+  {name:'Mint',         img:'plants/mint.png',         tempMin:17, tempMax:27, phMin:6.0, phMax:7.5, note:'Vigorous aromatic herb. Multiple harvests, partial shade ok.'},
+  {name:'Curry Leaf',   img:'plants/curry_leaf.png',   tempMin:26, tempMax:38, phMin:6.0, phMax:7.0, note:'Essential South Indian herb. Perennial, warm climate native.'},
+  {name:'Lemongrass',   img:'plants/lemongrass.png',   tempMin:25, tempMax:38, phMin:6.0, phMax:7.5, note:'Aromatic perennial. Very low maintenance, high oil content.'},
+  {name:'Pineapple',    img:'plants/pineapple.png',    tempMin:25, tempMax:35, phMin:5.5, phMax:7.0, note:'Tropical fruit crop. Long-cycle but high commercial return.'},
+  {name:'Banana',       img:'plants/banana.png',       tempMin:25, tempMax:38, phMin:6.0, phMax:7.5, note:'Fast-fruiting tropical. High K demand, excellent aquaponics fit.'},
+  {name:'Papaya',       img:'plants/papaya.png',       tempMin:22, tempMax:30, phMin:5.8, phMax:6.8, note:'Tropical fruit. Rapid growth, premium health market value.'},
+  {name:'Sweet Potato', img:'plants/sweet_potato.png', tempMin:25, tempMax:38, phMin:5.8, phMax:6.8, note:'Tropical tuber. Leaves edible too — dual-use aquaponics crop.'},
+  {name:'Radish',       img:'plants/radish.png',       tempMin:18, tempMax:28, phMin:6.0, phMax:7.0, note:'Ultra-fast root crop. 25–40 day harvest, ideal cool season.'},
+];
+
+// ── Also check localStorage for any user-added fish from list.html ──
+function loadUserAddedFish() {
+  try {
+    const raw = localStorage.getItem('aqua_fish_data');
+    if (!raw) return [];
+    const obj = JSON.parse(raw);
+    return Object.values(obj).map(f => ({
+      name    : f.name,
+      img     : f.imgSrc || f.imgDataUrl || ('assets/' + f.name.toLowerCase().replace(/\s+/g,'_') + '.png'),
+      tempMin : parseFloat(String(f.temp?.min || '20').replace(/[^\d.]/g, '')) || 20,
+      tempMax : parseFloat(String(f.temp?.max || '32').replace(/[^\d.]/g, '')) || 32,
+      phMin   : parseFloat(f.ph?.min) || 6.5,
+      phMax   : parseFloat(f.ph?.max) || 8.5,
+      note    : f.description?.substring(0, 80) || 'User-added species',
+      userAdded: true,
+    }));
+  } catch (e) { return []; }
+}
+
+function getSensorValues() {
+  const tempEl = document.getElementById('temp-display');
+  const phEl   = document.getElementById('ph-display');
+  const temp   = parseFloat(tempEl?.textContent);
+  const ph     = parseFloat(phEl?.textContent);
+  return { temp: isNaN(temp) ? null : temp, ph: isNaN(ph) ? null : ph };
+}
+
+function runRules(temp, ph) {
+  // Merge built-in DB with any user-added fish
+  const allFish  = [...FISH_DB, ...loadUserAddedFish()];
+  const matchFish  = allFish.filter(f =>
+    temp >= f.tempMin && temp <= f.tempMax &&
+    ph   >= f.phMin   && ph   <= f.phMax
+  );
+  const matchPlant = PLANT_DB.filter(p =>
+    temp >= p.tempMin && temp <= p.tempMax &&
+    ph   >= p.phMin   && ph   <= p.phMax
+  );
+  return { matchFish, matchPlant };
+}
+
+function fishCardHTML(f) {
+  const badge = f.userAdded
+    ? `<span style="position:absolute;top:6px;right:8px;font-size:9px;padding:2px 7px;border-radius:20px;background:rgba(245,158,11,0.2);color:#f59e0b;font-family:'JetBrains Mono',monospace;">MY FISH</span>`
+    : `<span style="position:absolute;top:6px;right:8px;font-size:9px;padding:2px 7px;border-radius:20px;background:rgba(0,218,243,0.15);color:#00daf3;font-family:'JetBrains Mono',monospace;">FISH</span>`;
+  return `
+    <div style="background:#0d1319;border:1px solid rgba(0,218,243,0.15);border-radius:14px;overflow:hidden;transition:border-color 0.2s;"
+      onmouseover="this.style.borderColor='rgba(0,218,243,0.45)'" onmouseout="this.style.borderColor='rgba(0,218,243,0.15)'">
+      <div style="height:96px;overflow:hidden;position:relative;background:#111820;">
+        <img src="${f.img}" alt="${f.name}"
+          style="width:100%;height:100%;object-fit:cover;opacity:0.88;"
+          onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+        <div style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;font-size:36px;background:#0d1319;color:#00daf3;">🐟</div>
+        <div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(10,15,20,0.92) 0%,transparent 55%);"></div>
+        <span style="position:absolute;bottom:7px;left:10px;font-weight:800;font-size:13px;color:#fff;">${f.name}</span>
+        ${badge}
+      </div>
+      <div style="padding:10px 12px;">
+        <p style="font-size:10px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;margin-bottom:5px;">
+          ${f.tempMin}–${f.tempMax}°C &nbsp;·&nbsp; pH ${f.phMin}–${f.phMax}
+        </p>
+        <p style="font-size:11px;color:#8a9aaa;line-height:1.5;">${f.note}</p>
+      </div>
+    </div>`;
+}
+
+function plantCardHTML(p) {
+  return `
+    <div style="background:#0d1319;border:1px solid rgba(108,224,0,0.15);border-radius:14px;overflow:hidden;transition:border-color 0.2s;"
+      onmouseover="this.style.borderColor='rgba(108,224,0,0.45)'" onmouseout="this.style.borderColor='rgba(108,224,0,0.15)'">
+      <div style="height:96px;overflow:hidden;position:relative;background:#0d1a0d;">
+        <img src="${p.img}" alt="${p.name}"
+          style="width:100%;height:100%;object-fit:cover;opacity:0.88;"
+          onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+        <div style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;font-size:36px;background:#0d1a0d;color:#6ce000;">🌱</div>
+        <div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(10,15,20,0.92) 0%,transparent 55%);"></div>
+        <span style="position:absolute;bottom:7px;left:10px;font-weight:800;font-size:13px;color:#fff;">${p.name}</span>
+        <span style="position:absolute;top:6px;right:8px;font-size:9px;padding:2px 7px;border-radius:20px;background:rgba(108,224,0,0.18);color:#6ce000;font-family:'JetBrains Mono',monospace;">PLANT</span>
+      </div>
+      <div style="padding:10px 12px;">
+        <p style="font-size:10px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;margin-bottom:5px;">
+          ${p.tempMin}–${p.tempMax}°C &nbsp;·&nbsp; pH ${p.phMin}–${p.phMax}
+        </p>
+        <p style="font-size:11px;color:#8a9aaa;line-height:1.5;">${p.note}</p>
+      </div>
+    </div>`;
+}
+
+function openComboModal() {
+  const { temp, ph } = getSensorValues();
+  if (!temp || !ph) {
+    alert('Sensors are offline. Please turn sensors ON first.');
+    return;
+  }
+
+  document.getElementById('comboOverlay').style.display = 'flex';
+  document.getElementById('combo-sensor-info').textContent =
+    `Temp: ${temp.toFixed(1)}°C  ·  pH: ${ph.toFixed(2)}`;
+
+  const { matchFish, matchPlant } = runRules(temp, ph);
+
+  // Fish cards
+  document.getElementById('combo-fish-grid').innerHTML = matchFish.length
+    ? matchFish.map(fishCardHTML).join('')
+    : '<p style="color:#5a6a7a;font-size:13px;grid-column:1/-1;padding:8px 0;">No fish from your inventory match the current conditions.</p>';
+
+  // Plant cards
+  document.getElementById('combo-plant-grid').innerHTML = matchPlant.length
+    ? matchPlant.map(plantCardHTML).join('')
+    : '<p style="color:#5a6a7a;font-size:13px;grid-column:1/-1;padding:8px 0;">No plants from your grow beds match the current conditions.</p>';
+
+  // Update Dr. Aqua button with current sensor values
+  const drAquaBtn = document.getElementById('drAquaBtn');
+  if (drAquaBtn) {
+    const fishNames  = matchFish.map(f => f.name).join(', ')  || 'none matched';
+    const plantNames = matchPlant.map(p => p.name).join(', ') || 'none matched';
+    drAquaBtn.setAttribute('data-temp', temp.toFixed(1));
+    drAquaBtn.setAttribute('data-ph',   ph.toFixed(2));
+    drAquaBtn.setAttribute('data-fish',  fishNames);
+    drAquaBtn.setAttribute('data-plant', plantNames);
+  }
+}
+
+function goToChatbotForAdvice() {
+  const btn   = document.getElementById('drAquaBtn');
+  const temp  = btn?.getAttribute('data-temp')  || currentTemp.toFixed(1);
+  const ph    = btn?.getAttribute('data-ph')    || currentPh.toFixed(2);
+  const fish  = btn?.getAttribute('data-fish')  || 'various species';
+  const plant = btn?.getAttribute('data-plant') || 'various plants';
+
+  const params = new URLSearchParams({
+    mode   : 'aquaponics_advice',
+    temp   : temp,
+    ph     : ph,
+    fish   : fish,
+    plant  : plant,
+  });
+  window.location.href = '/chatbot?' + params.toString();
+}
+
+function closeComboModal() {
+  document.getElementById('comboOverlay').style.display = 'none';
+}
+
+// ── SCROLL REVEAL ──
+const revealEls = document.querySelectorAll('.reveal');
+const revealObserver = new IntersectionObserver((entries) => {
+  entries.forEach((entry, i) => {
+    if (entry.isIntersecting) {
+      setTimeout(() => entry.target.classList.add('visible'), i * 120);
+      revealObserver.unobserve(entry.target);
+    }
+  });
+}, { threshold: 0.1 });
+revealEls.forEach(el => revealObserver.observe(el));
+</script>
+
+<!-- ═══════════════════════════════════════════════
+     COMBO RECOMMENDER MODAL
+═══════════════════════════════════════════════ -->
+<div id="comboOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.78);backdrop-filter:blur(8px);z-index:1000;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:#0d1319;border:1px solid rgba(0,218,243,0.18);border-radius:20px;width:100%;max-width:760px;max-height:90vh;overflow-y:auto;position:relative;">
+
+    <!-- Top accent line -->
+    <div style="height:2px;background:linear-gradient(90deg,transparent,#6ce000,#00daf3,transparent);border-radius:20px 20px 0 0;"></div>
+
+    <!-- Header -->
+    <div style="padding:24px 28px 16px;border-bottom:1px solid #1e2830;display:flex;justify-content:space-between;align-items:flex-start;">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+          <span style="font-size:18px;">🌿</span>
+          <h2 style="font-size:18px;font-weight:800;color:#dde3ec;margin:0;">Suitable Fish &amp; Plants</h2>
+          <span style="font-size:10px;padding:2px 8px;border-radius:20px;font-family:'JetBrains Mono',monospace;background:rgba(108,224,0,0.1);color:#6ce000;letter-spacing:0.08em;text-transform:uppercase;">Live Sensors</span>
+        </div>
+        <p id="combo-sensor-info" style="font-size:11px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;">Reading sensors...</p>
+      </div>
+      <button type="button" onclick="closeComboModal()" style="background:#1e2830;border:none;color:#5a6a7a;width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0;" onmouseover="this.style.color='#dde3ec'" onmouseout="this.style.color='#5a6a7a'">✕</button>
+    </div>
+
+    <div style="padding:24px 28px;">
+
+      <!-- FISH SECTION -->
+      <div style="margin-bottom:24px;">
+        <p style="font-size:10px;color:#00daf3;font-family:'JetBrains Mono',monospace;letter-spacing:0.12em;text-transform:uppercase;margin-bottom:12px;">🐟 Compatible Fish — from your inventory</p>
+        <div id="combo-fish-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <p style="color:#5a6a7a;font-size:13px;">Loading...</p>
+        </div>
+      </div>
+
+      <!-- DIVIDER -->
+      <div style="height:1px;background:#1e2830;margin-bottom:24px;"></div>
+
+      <!-- PLANT SECTION -->
+      <div style="margin-bottom:24px;">
+        <p style="font-size:10px;color:#6ce000;font-family:'JetBrains Mono',monospace;letter-spacing:0.12em;text-transform:uppercase;margin-bottom:12px;">🌱 Compatible Plants — from your grow beds</p>
+        <div id="combo-plant-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <p style="color:#5a6a7a;font-size:13px;">Loading...</p>
+        </div>
+      </div>
+
+      <!-- DIVIDER -->
+      <div style="height:1px;background:#1e2830;margin-bottom:20px;"></div>
+
+      <!-- ASK DR. AQUA BUTTON -->
+      <div style="background:#111820;border:1px solid rgba(0,218,243,0.12);border-radius:14px;padding:18px 20px;position:relative;overflow:hidden;">
+        <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,#00daf3,transparent);"></div>
+        <div style="display:flex;align-items:center;gap:14px;">
+          <div style="width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,#00daf3,#0077ff);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;box-shadow:0 0 18px rgba(0,218,243,0.3);">🐟</div>
+          <div style="flex:1;">
+            <p style="font-size:13px;font-weight:700;color:#dde3ec;margin:0 0 3px;">Want personalised aquaponics advice?</p>
+            <p style="font-size:11px;color:#5a6a7a;margin:0;">Dr. Aqua can suggest the best fish–plant pairings, feeding tips, and water adjustment plans based on your exact conditions.</p>
+          </div>
+          <button type="button" id="drAquaBtn" onclick="goToChatbotForAdvice()"
+            style="background:linear-gradient(135deg,#00daf3,#0077ff);color:#0a0f14;font-weight:800;font-size:12px;padding:11px 20px;border-radius:10px;border:none;cursor:pointer;white-space:nowrap;transition:all 0.2s;box-shadow:0 0 16px rgba(0,218,243,0.25);flex-shrink:0;"
+            onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 24px rgba(0,218,243,0.45)'"
+            onmouseout="this.style.transform='';this.style.boxShadow='0 0 16px rgba(0,218,243,0.25)'">
+            Ask Dr. Aqua →
+          </button>
+        </div>
+      </div>
+
+      <!-- Footer note -->
+      <p style="font-size:10px;color:#3a4a5a;font-family:'JetBrains Mono',monospace;margin-top:16px;text-align:center;">
+        Results based on live sensor readings. Fish from <span style="color:#00daf3;">list.html</span> · Plants from <span style="color:#6ce000;">aquaponics.html</span>.
+      </p>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── LIVE TEMPERATURE FETCH FROM FLASK /api/temperature ──
+let tempSensorConnected = false;
+let _fetchPaused = false;   // paused when tab is hidden (Page Visibility API)
+
+function showTempDisconnected(label) {
+  document.getElementById('temp-display').textContent = '---';
+  document.getElementById('tempDelta').textContent = '---';
+  document.getElementById('tempMin').textContent = '---';
+  document.getElementById('tempMax').textContent = '---';
+  document.getElementById('tempAvg').textContent = '---';
+  document.getElementById('rangePointer').style.left = '50%';
+  document.getElementById('rangePointer').style.background = '#5a6a7a';
+  const offStyle = 'font-size:11px;padding:2px 10px;border-radius:20px;font-family:JetBrains Mono,monospace;text-transform:uppercase;letter-spacing:0.05em;background:rgba(90,106,122,0.2);color:#5a6a7a';
+  const tBadge = document.getElementById('tempBadge');
+  tBadge.textContent = label || 'NO SENSOR';
+  tBadge.style.cssText = offStyle;
+}
+
+async function fetchLiveTemperature() {
+  if (!sensorOn || _fetchPaused) return;
+  try {
+    // cache:'no-store' ensures the browser never serves a stale cached response
+    const res = await fetch('/api/temperature', { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+
+    // Handle status field from the improved API
+    if (data.status === 'stale') {
+      tempSensorConnected = false;
+      showTempDisconnected('STALE');
+      return;
+    }
+    if (data.status === 'error' || data.status === 'connecting') {
+      tempSensorConnected = false;
+      showTempDisconnected(data.status === 'connecting' ? 'CONNECTING' : 'ERROR');
+      return;
+    }
+
+    const t = parseFloat(data.temperature);
+    if (isNaN(t) || data.temperature === null) throw new Error('No reading');
+
+    tempSensorConnected = true;
+    prevTemp = currentTemp;
+    currentTemp = t;
+    updateTempUI(t);
+  } catch (e) {
+    tempSensorConnected = false;
+    showTempDisconnected('NO SENSOR');
+  }
+}
+
+// ── Page Visibility API ──
+// When the tab goes to background the browser keeps setInterval running but
+// HTTP responses queue up. On return they all fire at once, flooding Flask's
+// single-threaded dev server and stalling the serial thread (~60 s bug).
+// Solution: pause polling while hidden, resume immediately on visibility.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    _fetchPaused = true;
+  } else {
+    _fetchPaused = false;
+    fetchLiveTemperature(); // catch up with one immediate poll on return
+  }
+});
+
+// Poll live sensor every 2 seconds (1 s was unnecessarily aggressive)
+setInterval(fetchLiveTemperature, 2000);
+fetchLiveTemperature();
+
+// ── LIVE DEPTH FETCH FROM FLASK /api/depth ──
+// Mirrors the temperature fetch pattern exactly.
+// TANK_HEIGHT_CM: total interior height of your fish tank in cm.
+// The HC-SR04 measures the AIR GAP (sensor → water surface).
+// Water depth = TANK_HEIGHT_CM − air_gap.
+// Set this to your actual tank height; default is 100 cm.
+const TANK_HEIGHT_CM = 100;
+
+let depthSensorConnected = false;
+
+function showDepthDisconnected(label) {
+  document.getElementById('depth-display').textContent = '--.-';
+  document.getElementById('depthDelta').textContent = '-- cm';
+  document.getElementById('depthMin').textContent = '-- cm';
+  document.getElementById('depthMax').textContent = '-- cm';
+  document.getElementById('depthAvg').textContent = '-- cm';
+  document.getElementById('depthRangePointer').style.left = '50%';
+  document.getElementById('depthRangePointer').style.background = '#5a6a7a';
+  document.getElementById('depthWater').style.height = '0%';
+  document.getElementById('depthBeam').style.height = '100%';
+  const offStyle = 'font-size:10px;padding:2px 10px;border-radius:20px;font-family:JetBrains Mono,monospace;text-transform:uppercase;letter-spacing:0.05em;background:rgba(90,106,122,0.2);color:#5a6a7a';
+  const dBadge = document.getElementById('depthBadge');
+  dBadge.textContent = label || 'NO SENSOR';
+  dBadge.style.cssText = offStyle;
+}
+
+function updateDepthUI(depth) {
+  if (!sensorOn) return;
+
+  document.getElementById('depth-display').textContent = depth.toFixed(1);
+  localStorage.setItem('aqua_current_depth', depth.toFixed(1));
+
+  const dStatus = getDepthStatus(depth);
+  const dBadge = document.getElementById('depthBadge');
+  dBadge.textContent = dStatus.label;
+  dBadge.style.cssText = `font-size:10px;padding:2px 10px;border-radius:20px;font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:0.05em;${dStatus.badgeStyle}`;
+
+  const dDelta = prevDepth !== null ? (depth - prevDepth) : 0;
+  const dDeltaEl = document.getElementById('depthDelta');
+  dDeltaEl.textContent = (dDelta >= 0 ? '+' : '') + dDelta.toFixed(1) + ' cm';
+  dDeltaEl.style.color = dDelta > 0.5 ? '#f59e0b' : dDelta < -0.5 ? '#64b5ff' : '#6ce000';
+
+  const dPtr = Math.max(1, Math.min(99, (depth / 120) * 100));
+  document.getElementById('depthRangePointer').style.left = dPtr + '%';
+  document.getElementById('depthRangePointer').style.background = dStatus.color;
+
+  const waterPct = Math.max(2, Math.min(98, (depth / TANK_HEIGHT_CM) * 100));
+  document.getElementById('depthWater').style.height = waterPct + '%';
+  document.getElementById('depthBeam').style.height = (100 - waterPct) + '%';
+
+  depthHistory.push(depth);
+  if (depthHistory.length > maxPoints) depthHistory.shift();
+  depthChartInst.data.datasets[0].data = [...depthHistory];
+  depthChartInst.data.datasets[0].borderColor = dStatus.color;
+  depthChartInst.update('none');
+
+  const validDepths = depthHistory.filter(v => v !== null);
+  const dMn = validDepths.length ? Math.min(...validDepths).toFixed(1) : '--';
+  const dMx = validDepths.length ? Math.max(...validDepths).toFixed(1) : '--';
+  const dAv = validDepths.length ? (validDepths.reduce((a,b)=>a+b,0)/validDepths.length).toFixed(1) : '--';
+  document.getElementById('depthMin').textContent = dMn + ' cm';
+  document.getElementById('depthMax').textContent = dMx + ' cm';
+  document.getElementById('depthAvg').textContent = dAv + ' cm';
+
+  const alertRowDepth = document.getElementById('alertRowDepth');
+  if (depth < 30 || depth > 80) {
+    alertRowDepth.style.display = 'flex';
+    const dmsg = depth < 30
+      ? `📡 Depth ${depth.toFixed(1)} cm — Water level critically low!`
+      : `📡 Depth ${depth.toFixed(1)} cm — Overflow risk, check inlet valve`;
+    document.getElementById('alertMsgDepth').textContent = dmsg;
+    alertRowDepth.style.borderColor = depth < 15 || depth > 95 ? 'rgba(255,100,100,0.3)' : 'rgba(124,58,237,0.25)';
+    document.getElementById('alertTimeDepth').textContent = new Date().toTimeString().split(' ')[0];
+  } else {
+    alertRowDepth.style.display = 'none';
+  }
+}
+
+async function fetchLiveDepth() {
+  if (!sensorOn || _fetchPaused) return;
+  try {
+    const res = await fetch('/api/depth', { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+
+    if (data.status === 'stale') {
+      depthSensorConnected = false;
+      showDepthDisconnected('STALE');
+      return;
+    }
+    if (data.status === 'error' || data.status === 'connecting') {
+      depthSensorConnected = false;
+      showDepthDisconnected(data.status === 'connecting' ? 'CONNECTING' : 'ERROR');
+      return;
+    }
+
+    const rawCm = parseFloat(data.distance_cm);
+    if (isNaN(rawCm) || data.distance_cm === null) throw new Error('No reading');
+
+    // Convert air-gap measurement to water depth
+    const waterDepth = Math.max(0, TANK_HEIGHT_CM - rawCm);
+
+    depthSensorConnected = true;
+    prevDepth = currentDepth;
+    currentDepth = waterDepth;
+    updateDepthUI(waterDepth);
+  } catch (e) {
+    depthSensorConnected = false;
+    showDepthDisconnected('NO SENSOR');
+  }
+}
+
+// Resume depth poll on tab visibility restore
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) {
+    fetchLiveDepth();
+  }
+});
+
+// Poll depth every 2 seconds
+setInterval(fetchLiveDepth, 2000);
+fetchLiveDepth();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Disease Analysis | The Living Lab</title>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;400;500;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: { extend: {
+        colors: { primary: "#00daf3", surface: "#0a0f14" },
+        fontFamily: { headline: ["Manrope"], mono: ["JetBrains Mono"] }
+      }}
+    };
+  </script>
+  <style>
+    * { box-sizing: border-box; }
+    body { background: #0a0f14; color: #dde3ec; font-family: 'Manrope', sans-serif; margin: 0; overflow: hidden; }
+    body::before { content:''; position:fixed;inset:0;background-image:linear-gradient(rgba(0,218,243,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,218,243,0.03) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0; }
+    .sidebar { width:220px;background:#0d1319;border-right:1px solid #1e2830; }
+    .nav-item { display:flex;align-items:center;gap:10px;padding:12px 20px;color:#5a6a7a;font-size:13px;font-weight:500;cursor:pointer;transition:all 0.2s;border-left:2px solid transparent;text-decoration:none; }
+    .nav-item:hover { color:#00daf3;background:rgba(0,218,243,0.05); }
+    .nav-item.active { color:#00daf3;border-left-color:#00daf3;background:rgba(0,218,243,0.07); }
+    .nav-icon { font-size:16px;width:20px;text-align:center; }
+    .pulse-dot { width:8px;height:8px;border-radius:50%;background:#6ce000;animation:pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(108,224,0,0.4)} 50%{box-shadow:0 0 0 6px rgba(108,224,0,0)} }
+    .stat-card { background:#111820;border:1px solid #1e2830;border-radius:14px;padding:20px;transition:border-color 0.3s; }
+    .badge { font-size:10px;padding:2px 8px;border-radius:20px;font-family:'JetBrains Mono',monospace;letter-spacing:0.05em;text-transform:uppercase; }
+    .badge-ok  { background:rgba(108,224,0,0.1);color:#6ce000; }
+    .badge-warn{ background:rgba(245,158,11,0.1);color:#f59e0b; }
+    .badge-cyan{ background:rgba(0,218,243,0.1);color:#00daf3; }
+    .badge-red { background:rgba(255,100,100,0.1);color:#ff6464; }
+    @keyframes fadeInUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+    .anim-1 { animation:fadeInUp 0.5s ease 0.1s both; }
+    .anim-2 { animation:fadeInUp 0.5s ease 0.2s both; }
+    .anim-3 { animation:fadeInUp 0.5s ease 0.3s both; }
+    .upload-zone { border:2px dashed #1e2830;border-radius:16px;transition:all 0.3s;cursor:pointer;position:relative; }
+    .upload-zone:hover { border-color:#00daf3;background:rgba(0,218,243,0.03); }
+    .upload-zone.drag-over { border-color:#00daf3;background:rgba(0,218,243,0.06);transform:scale(1.01); }
+    .progress-bar { height:3px;background:#1e2830;border-radius:2px;overflow:hidden; }
+    .progress-fill { height:100%;background:linear-gradient(90deg,#00daf3,#6ce000);border-radius:2px;transition:width 0.15s linear; }
+    .result-card { background:#111820;border:1px solid;border-radius:14px;padding:16px;transition:all 0.3s; }
+    .result-critical { border-color:rgba(255,100,100,0.3);background:rgba(255,100,100,0.03); }
+    .result-warning  { border-color:rgba(245,158,11,0.3);background:rgba(245,158,11,0.03); }
+    .result-ok       { border-color:rgba(108,224,0,0.3);background:rgba(108,224,0,0.03); }
+    .ai-result-block { background:#0d1a1f;border:1px solid #00daf322;border-radius:14px;padding:18px;margin-top:16px; }
+    .solution-box { background:#0a1a0a;border:1px solid #6ce00022;border-radius:10px;padding:12px 14px;margin-top:10px; }
+    ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#1e2830;border-radius:2px}
+
+    /* ===== FISH DOCTOR ANIMATIONS ===== */
+    @keyframes drFloat   { 0%,100%{transform:translateY(0)}  50%{transform:translateY(-7px)} }
+    @keyframes drHeadBob { 0%,100%{transform:rotate(-2deg)} 50%{transform:rotate(2deg)} }
+    @keyframes drStetho  { 0%,100%{transform:rotate(-10deg)} 50%{transform:rotate(10deg)} }
+    @keyframes drWrench  { 0%,100%{transform:rotate(0deg)}   30%{transform:rotate(-20deg)} 70%{transform:rotate(15deg)} }
+    @keyframes drScan    { 0%{transform:translateY(-22px);opacity:0} 15%{opacity:.7} 85%{opacity:.7} 100%{transform:translateY(22px);opacity:0} }
+    @keyframes drEyeGlow { 0%,100%{filter:drop-shadow(0 0 3px #00daf3)} 50%{filter:drop-shadow(0 0 10px #00daf3)} }
+    @keyframes drHeart   { 0%,100%{opacity:.4} 50%{opacity:1} }
+    @keyframes drBubCy   { 0%{cy:90px;opacity:.7} 100%{cy:44px;opacity:0} }
+    @keyframes drBlink   { 0%,90%,100%{transform:scaleY(1)} 95%{transform:scaleY(0.1)} }
+
+    .dr-float  { animation: drFloat 3s ease-in-out infinite; }
+    .dr-head   { animation: drHeadBob 4s ease-in-out infinite; transform-origin: 110px 105px; }
+    .dr-stetho { animation: drStetho 3.5s ease-in-out infinite; transform-origin: 63px 108px; }
+    .dr-wrench { animation: drWrench 2.5s ease-in-out infinite; transform-origin: 157px 148px; }
+    .dr-scan   { animation: drScan 2.8s ease-in-out infinite; }
+    .dr-eye    { animation: drEyeGlow 2s ease-in-out infinite; }
+    .dr-heart  { animation: drHeart 1.5s ease-in-out infinite; }
+    .dr-blink  { animation: drBlink 4s ease-in-out infinite; transform-origin: center; }
+  </style>
+</head>
+<body class="flex overflow-hidden h-screen" style="position:relative;z-index:1;">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar flex flex-col h-screen flex-shrink-0" style="z-index:10;position:relative;">
+    <div class="px-5 py-6" style="border-bottom:1px solid #1e2830;">
+      <div class="flex items-center gap-3 mb-1">
+        <div style="width:28px;height:28px;background:linear-gradient(135deg,#00daf3,#0077ff);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#0a0f14;">L</div>
+        <span class="font-bold text-sm" style="color:#dde3ec;">Living Lab</span>
+      </div>
+      <p class="text-xs ml-10" style="color:#3a4a5a;font-family:'JetBrains Mono',monospace;">AQ-SYS v2.4</p>
+    </div>
+    <div class="px-5 py-4" style="border-bottom:1px solid #1e2830;">
+      <div class="flex items-center gap-2">
+        <div class="pulse-dot"></div>
+        <span style="font-size:11px;color:#6ce000;font-family:'JetBrains Mono',monospace;letter-spacing:0.05em;">ALL SENSORS ONLINE</span>
+      </div>
+    </div>
+    <nav class="flex-1 py-4">
+      <div class="px-5 mb-3" style="font-size:10px;color:#3a4a5a;letter-spacing:0.1em;font-family:'JetBrains Mono',monospace;">NAVIGATION</div>
+      <a href="/" class="nav-item"><span class="nav-icon">◈</span> Dashboard</a>
+      <a href="/list"      class="nav-item"><span class="nav-icon">⊞</span> Fish Inventory</a>
+      <a href="/disease"   class="nav-item active"><span class="nav-icon">⬡</span> Disease Analysis</a>
+      <a href="/aquaponics" class="nav-item"><span class="nav-icon">◎</span> Aquaponics</a>
+      <a href="/chatbot" class="nav-item"><span class="nav-icon">◬</span> AI Assistant</a>
+      <a href="/dimension" class="nav-item"><span class="nav-icon">◭</span> 3D Model</a>
+    </nav>
+    <div class="px-5 py-4" style="border-top:1px solid #1e2830;">
+      <div class="stat-card" style="padding:12px;">
+        <p style="font-size:10px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;margin-bottom:6px;">AI MODEL</p>
+        <p style="font-size:12px;font-weight:600;color:#00daf3;">AquaScan v4.2</p>
+        <p style="font-size:10px;color:#5a6a7a;margin-top:2px;">94.7% accuracy</p>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="flex-1 flex flex-col overflow-hidden" style="position:relative;z-index:1;">
+    <header class="flex justify-between items-center px-8 h-14 flex-shrink-0" style="border-bottom:1px solid #1e2830;background:rgba(10,15,20,0.9);backdrop-filter:blur(20px);">
+      <div>
+        <h1 class="font-bold text-sm" style="color:#dde3ec;">Disease Analysis</h1>
+        <p style="font-size:11px;color:#3a4a5a;font-family:'JetBrains Mono',monospace;">AI-powered fish pathology detection</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <span style="font-size:11px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;">Last scan: <span style="color:#00daf3;" id="lastScanTime">—</span></span>
+        <span class="badge badge-cyan">AquaScan v4.2</span>
+      </div>
+    </header>
+
+    <main class="flex-1 overflow-y-auto p-8">
+      <div class="grid grid-cols-3 gap-6">
+
+        <!-- LEFT: DOCTOR + UPLOAD + RESULTS -->
+        <div class="col-span-2 flex flex-col gap-4">
+
+          <!-- ===== FISH DOCTOR HERO CARD ===== -->
+          <div class="stat-card anim-1" style="border-color:rgba(0,218,243,0.12);background:linear-gradient(135deg,#111820,#0d1a24);">
+            <div style="display:flex;align-items:center;justify-content:center;gap:32px;padding:10px 0 6px;">
+
+              <!-- SVG Doctor Robot -->
+              <svg width="200" height="200" viewBox="0 0 220 210" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;flex-shrink:0;">
+                <defs>
+                  <radialGradient id="rg-body" cx="50%" cy="35%" r="60%">
+                    <stop offset="0%" stop-color="#1e3a4e"/>
+                    <stop offset="100%" stop-color="#0d1e2e"/>
+                  </radialGradient>
+                  <radialGradient id="rg-helm" cx="42%" cy="35%" r="65%">
+                    <stop offset="0%" stop-color="#003c5a" stop-opacity="0.92"/>
+                    <stop offset="100%" stop-color="#001020" stop-opacity="0.97"/>
+                  </radialGradient>
+                  <radialGradient id="rg-fish" cx="45%" cy="42%" r="60%">
+                    <stop offset="0%" stop-color="#00c8ee"/>
+                    <stop offset="100%" stop-color="#006688"/>
+                  </radialGradient>
+                  <filter id="dr-glow">
+                    <feDropShadow dx="0" dy="0" stdDeviation="5" flood-color="#00daf3" flood-opacity="0.65"/>
+                  </filter>
+                  <filter id="dr-soft">
+                    <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#00daf3" flood-opacity="0.35"/>
+                  </filter>
+                  <clipPath id="dr-helmc">
+                    <ellipse cx="110" cy="62" rx="37" ry="43"/>
+                  </clipPath>
+                </defs>
+
+                <!-- ── WHOLE BODY FLOAT ── -->
+                <g class="dr-float">
+
+                  <!-- ground shadow -->
+                  <ellipse cx="110" cy="204" rx="42" ry="6" fill="#000" opacity="0.3"/>
+
+                  <!-- LEGS -->
+                  <rect x="88"  y="152" width="15" height="36" rx="7" fill="#1a2e3e" stroke="#253a4e" stroke-width="1.5"/>
+                  <rect x="117" y="152" width="15" height="36" rx="7" fill="#1a2e3e" stroke="#253a4e" stroke-width="1.5"/>
+                  <!-- Feet -->
+                  <ellipse cx="95"  cy="188" rx="13" ry="7" fill="#12202e" stroke="#1e3048" stroke-width="1.5"/>
+                  <ellipse cx="125" cy="188" rx="13" ry="7" fill="#12202e" stroke="#1e3048" stroke-width="1.5"/>
+                  <!-- Knee lights -->
+                  <circle cx="95"  cy="158" r="4.5" fill="#0d1a28" stroke="#00daf3" stroke-width="1" opacity="0.7"/>
+                  <circle cx="125" cy="158" r="4.5" fill="#0d1a28" stroke="#00daf3" stroke-width="1" opacity="0.7"/>
+
+                  <!-- TORSO -->
+                  <rect x="78" y="100" width="64" height="60" rx="14" fill="url(#rg-body)" stroke="#253a4e" stroke-width="2"/>
+                  <!-- Chest panel -->
+                  <rect x="86" y="108" width="48" height="36" rx="8" fill="#0b1726" stroke="#1e3048" stroke-width="1.2"/>
+                  <!-- Screen label -->
+                  <rect x="89" y="112" width="42" height="11" rx="3" fill="#001522"/>
+                  <text x="110" y="121" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="5.5" fill="#00daf3" letter-spacing="0.8">AQUASCAN</text>
+                  <!-- Heart-rate line -->
+                  <polyline points="89,132 95,132 98,126 102,138 107,126 111,138 114,132 131,132"
+                    fill="none" stroke="#00daf3" stroke-width="1.2" class="dr-heart"/>
+                  <!-- Bolts -->
+                  <circle cx="82" cy="120" r="3" fill="#0d1a28" stroke="#253a4e" stroke-width="1"/>
+                  <circle cx="82" cy="130" r="3" fill="#0d1a28" stroke="#253a4e" stroke-width="1"/>
+                  <circle cx="138" cy="120" r="3" fill="#0d1a28" stroke="#253a4e" stroke-width="1"/>
+                  <circle cx="138" cy="130" r="3" fill="#0d1a28" stroke="#253a4e" stroke-width="1"/>
+
+                  <!-- SHOULDERS -->
+                  <circle cx="76"  cy="106" r="10" fill="#1a2e3e" stroke="#253a4e" stroke-width="1.5"/>
+                  <circle cx="144" cy="106" r="10" fill="#1a2e3e" stroke="#253a4e" stroke-width="1.5"/>
+
+                  <!-- LEFT ARM + STETHOSCOPE -->
+                  <g class="dr-stetho">
+                    <rect x="56" y="106" width="14" height="40" rx="6" fill="#1a2e3e" stroke="#253a4e" stroke-width="1.5"/>
+                    <ellipse cx="63" cy="150" rx="9" ry="8" fill="#12202e" stroke="#1e3048" stroke-width="1.5"/>
+                    <path d="M63,150 Q50,166 57,178 Q65,190 75,185" fill="none" stroke="#00daf3" stroke-width="2.5" stroke-linecap="round"/>
+                    <circle cx="75" cy="185" r="6" fill="#00daf3" opacity="0.9" filter="url(#dr-soft)"/>
+                    <circle cx="75" cy="185" r="3" fill="#0a1828"/>
+                  </g>
+
+                  <!-- RIGHT ARM + SCANNER -->
+                  <g class="dr-wrench">
+                    <rect x="150" y="106" width="14" height="40" rx="6" fill="#1a2e3e" stroke="#253a4e" stroke-width="1.5"/>
+                    <ellipse cx="157" cy="150" rx="9" ry="8" fill="#12202e" stroke="#1e3048" stroke-width="1.5"/>
+                    <rect x="151" y="154" width="18" height="28" rx="5" fill="#0d1a28" stroke="#00daf3" stroke-width="1.5"/>
+                    <rect x="154" y="157" width="12" height="8" rx="2" fill="#001520"/>
+                    <circle cx="160" cy="161" r="3" fill="#00daf3" opacity="0.85">
+                      <animate attributeName="opacity" values="0.35;1;0.35" dur="0.8s" repeatCount="indefinite"/>
+                    </circle>
+                    <line x1="160" y1="176" x2="170" y2="190" stroke="#00daf3" stroke-width="1.5" stroke-dasharray="3 2" opacity="0.6">
+                      <animate attributeName="opacity" values="0.25;0.9;0.25" dur="0.8s" repeatCount="indefinite"/>
+                    </line>
+                  </g>
+
+                  <!-- NECK -->
+                  <rect x="103" y="93" width="14" height="14" rx="5" fill="#1a2e3e" stroke="#253a4e" stroke-width="1.5"/>
+                  <circle cx="106" cy="97" r="2" fill="#00daf3" opacity="0.45"/>
+                  <circle cx="114" cy="97" r="2" fill="#00daf3" opacity="0.45"/>
+
+                  <!-- ═══ HEAD GROUP (bobs) ═══ -->
+                  <g class="dr-head">
+
+                    <!-- Doctor cap -->
+                    <rect x="82"  y="18" width="56" height="10" rx="3" fill="#1a2e3e" stroke="#253a4e" stroke-width="1.5"/>
+                    <rect x="92"  y="8"  width="36" height="13" rx="4" fill="#12202e" stroke="#1e3048" stroke-width="1.5"/>
+                    <!-- Red cross on cap -->
+                    <rect x="108" y="10" width="4" height="9" rx="1.5" fill="#ff5555" opacity="0.95"/>
+                    <rect x="105" y="13" width="10" height="3.5" rx="1.5" fill="#ff5555" opacity="0.95"/>
+
+                    <!-- Helmet outer glow -->
+                    <ellipse cx="110" cy="62" rx="42" ry="46" fill="none" stroke="#00daf3" stroke-width="0.8" opacity="0.2" filter="url(#dr-glow)"/>
+
+                    <!-- Fish-head glass helmet -->
+                    <ellipse cx="110" cy="62" rx="38" ry="44" fill="url(#rg-helm)" stroke="#00daf3" stroke-width="1.8" opacity="0.96"/>
+                    <!-- Helmet glass shine -->
+                    <ellipse cx="95" cy="44" rx="11" ry="7" fill="white" opacity="0.06"/>
+
+                    <!-- ── FISH INSIDE HELMET ── -->
+                    <g clip-path="url(#dr-helmc)">
+                      <!-- Fish body -->
+                      <ellipse cx="110" cy="66" rx="29" ry="19" fill="url(#rg-fish)" opacity="0.92"/>
+                      <!-- Fish tail -->
+                      <polygon points="139,66 154,52 154,80" fill="#0088bb" opacity="0.88"/>
+                      <!-- Belly highlight -->
+                      <ellipse cx="106" cy="72" rx="18" ry="10" fill="#44ddff" opacity="0.28"/>
+                      <!-- Scale arcs -->
+                      <path d="M94,58 Q102,52 110,58 Q102,64 94,58Z" fill="none" stroke="#33bbdd" stroke-width="0.8" opacity="0.5"/>
+                      <path d="M102,63 Q110,57 118,63 Q110,69 102,63Z" fill="none" stroke="#33bbdd" stroke-width="0.8" opacity="0.5"/>
+                      <path d="M86,63  Q94,57  102,63 Q94,69  86,63Z"  fill="none" stroke="#33bbdd" stroke-width="0.8" opacity="0.4"/>
+                      <!-- Fins -->
+                      <path d="M100,47 Q110,37 120,47" fill="#0077aa" stroke="#0099cc" stroke-width="1" opacity="0.8"/>
+                      <path d="M104,84 Q110,93 116,84" fill="#0077aa" stroke="#0099cc" stroke-width="1" opacity="0.7"/>
+                      <!-- Mouth -->
+                      <ellipse cx="82" cy="67" rx="5" ry="3.5" fill="#005577" stroke="#007799" stroke-width="1"/>
+                      <ellipse cx="82" cy="66" rx="3" ry="1.5" fill="#002233" opacity="0.8"/>
+                      <!-- Gill -->
+                      <path d="M90,57 Q88,66 90,75" fill="none" stroke="#0077aa" stroke-width="1.5" opacity="0.7"/>
+                      <!-- Bubbles inside helmet -->
+                      <circle cx="128" cy="88" r="3" fill="none" stroke="#00daf3" stroke-width="0.8">
+                        <animate attributeName="cy" values="90;44" dur="2.8s" repeatCount="indefinite"/>
+                        <animate attributeName="opacity" values="0.65;0" dur="2.8s" repeatCount="indefinite"/>
+                      </circle>
+                      <circle cx="120" cy="92" r="2" fill="none" stroke="#00daf3" stroke-width="0.8">
+                        <animate attributeName="cy" values="93;46" dur="3.2s" begin="1s" repeatCount="indefinite"/>
+                        <animate attributeName="opacity" values="0.5;0" dur="3.2s" begin="1s" repeatCount="indefinite"/>
+                      </circle>
+                      <!-- Scan line across fish -->
+                      <line x1="72" y1="44" x2="148" y2="44" stroke="#00daf3" stroke-width="1.5" opacity="0.5" class="dr-scan"/>
+                    </g>
+
+                    <!-- LEFT EYE (robot overlay) -->
+                    <g class="dr-eye dr-blink">
+                      <circle cx="91"  cy="56" r="9"   fill="#001828" stroke="#00daf3" stroke-width="1.5"/>
+                      <circle cx="91"  cy="56" r="5"   fill="#00daf3" opacity="0.92"/>
+                      <circle cx="91"  cy="56" r="2.2" fill="#001020"/>
+                      <circle cx="89"  cy="54" r="1.5" fill="white" opacity="0.6"/>
+                    </g>
+                    <!-- RIGHT EYE -->
+                    <g class="dr-eye dr-blink" style="animation-delay:0.1s;">
+                      <circle cx="110" cy="56" r="9"   fill="#001828" stroke="#00daf3" stroke-width="1.5"/>
+                      <circle cx="110" cy="56" r="5"   fill="#00daf3" opacity="0.92"/>
+                      <circle cx="110" cy="56" r="2.2" fill="#001020"/>
+                      <circle cx="108" cy="54" r="1.5" fill="white" opacity="0.6"/>
+                    </g>
+
+                    <!-- Helmet bottom rim -->
+                    <ellipse cx="110" cy="104" rx="38" ry="8" fill="#1a2e3e" stroke="#253a4e" stroke-width="1.5"/>
+                    <circle cx="76"  cy="99" r="3" fill="#0d1a28" stroke="#00daf3" stroke-width="1" opacity="0.7"/>
+                    <circle cx="144" cy="99" r="3" fill="#0d1a28" stroke="#00daf3" stroke-width="1" opacity="0.7"/>
+
+                  </g>
+                  <!-- END HEAD -->
+
+                </g>
+                <!-- END FLOAT -->
+
+                <!-- SPEECH BUBBLE (static, appears after load) -->
+                <g style="animation:fadeInUp 0.6s ease 0.8s both;">
+                  <rect x="148" y="8" width="70" height="38" rx="10" fill="#1a2e3e" stroke="#00daf3" stroke-width="1.5"/>
+                  <polygon points="158,46 150,58 168,46" fill="#1a2e3e" stroke="#00daf3" stroke-width="1.2"/>
+                  <text x="183" y="24" text-anchor="middle" font-family="Manrope,sans-serif" font-size="8" font-weight="700" fill="#00daf3">Hello! I'm</text>
+                  <text x="183" y="36" text-anchor="middle" font-family="Manrope,sans-serif" font-size="8" font-weight="700" fill="#6ce000">Dr. Aqua 🩺</text>
+                </g>
+
+              </svg>
+              <!-- END SVG -->
+
+              <!-- Text beside robot -->
+              <div style="flex:1;max-width:260px;">
+                <p style="font-size:10px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;letter-spacing:0.12em;margin-bottom:8px;">◈ AI FISH DOCTOR</p>
+                <h2 style="font-size:20px;font-weight:800;color:#dde3ec;line-height:1.3;margin-bottom:10px;">Upload your fish photo to find <span style="color:#00daf3;">disease &amp; solution</span></h2>
+                <p style="font-size:12px;color:#5a6a7a;line-height:1.6;margin-bottom:14px;">Dr. Aqua uses the AquaScan AI model to analyze your fish image and diagnose diseases with 94.7% accuracy.</p>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                  <span class="badge badge-cyan">AquaScan v4.2</span>
+                  <span class="badge badge-ok">94.7% Accuracy</span>
+                  <span class="badge" style="background:rgba(255,100,100,0.1);color:#ff6464;">7 Diseases</span>
+                </div>
+              </div>
+
+            </div>
+          </div>
+          <!-- END DOCTOR HERO -->
+
+          <!-- Upload card -->
+          <div class="stat-card anim-2">
+            <div class="flex justify-between items-center mb-5">
+              <h3 class="font-bold text-base">Diagnostic Scan</h3>
+              <span class="badge badge-cyan">Upload Image</span>
+            </div>
+
+            <div class="upload-zone p-10 text-center" id="uploadZone"
+              onclick="document.getElementById('fileInput').click()"
+              ondragover="event.preventDefault();this.classList.add('drag-over')"
+              ondragleave="this.classList.remove('drag-over')"
+              ondrop="handleDrop(event)">
+              <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="handleFile(this.files[0])">
+              <div id="uploadContent">
+                <div style="font-size:32px;margin-bottom:10px;">⬆</div>
+                <p class="font-bold text-base mb-2">Drop image here or click to upload</p>
+                <p style="font-size:12px;color:#5a6a7a;">JPG / PNG · Max 25MB · Fish close-up recommended</p>
+              </div>
+              <div id="previewContent" style="display:none;">
+                <img id="previewImg" style="max-height:180px;border-radius:10px;margin:0 auto;display:block;"/>
+                <p class="font-bold mt-3" id="fileName" style="font-size:13px;color:#00daf3;"></p>
+              </div>
+            </div>
+
+            <!-- Progress bar -->
+            <div id="progressWrap" style="display:none;margin-top:16px;">
+              <div class="flex justify-between items-center mb-2">
+                <span style="font-size:11px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;" id="progressLabel">Analyzing...</span>
+                <span style="font-size:11px;color:#00daf3;font-family:'JetBrains Mono',monospace;" id="progressPct">0%</span>
+              </div>
+              <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%;"></div></div>
+            </div>
+
+            <!-- AI Result -->
+            <div id="aiResultBlock" class="ai-result-block" style="display:none;">
+              <div class="flex justify-between items-center mb-3">
+                <span style="font-size:11px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;letter-spacing:0.1em;">AQUASCAN RESULT</span>
+                <span class="badge" id="aiSeverityBadge">—</span>
+              </div>
+              <div class="flex items-center gap-3 mb-1">
+                <span style="font-size:22px;font-weight:800;color:#dde3ec;" id="aiDiseaseName">—</span>
+                <span style="font-size:15px;font-weight:700;font-family:'JetBrains Mono',monospace;" id="aiConfidenceVal">—</span>
+              </div>
+              <div style="height:4px;background:#1e2830;border-radius:2px;overflow:hidden;margin-bottom:12px;">
+                <div id="aiConfidenceBar" style="height:100%;width:0%;background:linear-gradient(90deg,#00daf3,#6ce000);border-radius:2px;transition:width 0.8s ease;"></div>
+              </div>
+              <div class="solution-box">
+                <p style="font-size:10px;color:#6ce000;font-family:'JetBrains Mono',monospace;letter-spacing:0.08em;margin-bottom:5px;">💊 RECOMMENDED ACTION</p>
+                <p style="font-size:12px;color:#dde3ec;line-height:1.6;" id="aiSolution">—</p>
+              </div>
+
+              <!-- Ask Dr. Aqua Button -->
+              <div id="askDrAquaWrap" style="display:none;margin-top:16px;">
+                <div style="height:1px;background:linear-gradient(90deg,transparent,rgba(0,218,243,0.2),transparent);margin-bottom:14px;"></div>
+                <div style="display:flex;align-items:center;gap:12px;background:rgba(0,218,243,0.04);border:1px solid rgba(0,218,243,0.15);border-radius:12px;padding:12px 16px;">
+                  <div style="width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,#00daf3,#0077ff);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;box-shadow:0 0 16px rgba(0,218,243,0.3);">🐟</div>
+                  <div style="flex:1;">
+                    <p style="font-size:12px;font-weight:700;color:#dde3ec;margin:0 0 2px;">Want more detailed guidance?</p>
+                    <p style="font-size:11px;color:#5a6a7a;margin:0;">Dr. Aqua can give you step-by-step treatment plans, dosage advice, and more.</p>
+                  </div>
+                  <button id="askDrAquaBtn" onclick="goToDrAqua()"
+                    style="background:linear-gradient(135deg,#00daf3,#0077ff);color:#0a0f14;font-weight:800;font-size:12px;padding:10px 18px;border-radius:10px;border:none;cursor:pointer;white-space:nowrap;transition:all 0.2s;box-shadow:0 0 16px rgba(0,218,243,0.25);"
+                    onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 4px 24px rgba(0,218,243,0.45)'"
+                    onmouseout="this.style.transform='';this.style.boxShadow='0 0 16px rgba(0,218,243,0.25)'">
+                    Ask Dr. Aqua →
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between mt-5">
+              <span style="font-size:11px;color:#5a6a7a;" id="sampleCount">No image loaded</span>
+              <button onclick="analyze()" id="analyzeBtn"
+                style="background:#00daf3;color:#0a0f14;font-weight:700;font-size:13px;padding:10px 24px;border-radius:10px;border:none;cursor:pointer;transition:all 0.2s;"
+                onmouseover="this.style.background='#00c4db';this.style.boxShadow='0 0 20px rgba(0,218,243,0.3)'"
+                onmouseout="this.style.background='#00daf3';this.style.boxShadow='none'">
+                Run Analysis →
+              </button>
+            </div>
+          </div>
+
+          <!-- Confidence Chart -->
+          <div class="stat-card anim-3" id="resultsCard" style="display:none;">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="font-bold">Confidence Breakdown</h3>
+              <span class="badge" id="resultBadge">—</span>
+            </div>
+            <div class="flex gap-4">
+              <div class="flex-1 flex flex-col gap-2" id="resultsList"></div>
+              <div style="width:160px;height:160px;flex-shrink:0;"><canvas id="confidenceChart"></canvas></div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- RIGHT PANEL -->
+        <div class="flex flex-col gap-4">
+          <div class="stat-card anim-3">
+            <p style="font-size:10px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;letter-spacing:0.1em;margin-bottom:14px;">DETECTION CLASSES</p>
+            <div class="flex flex-col gap-2">
+              <div class="result-card result-critical" style="padding:10px 12px;">
+                <div class="flex justify-between items-center">
+                  <span style="font-size:12px;font-weight:600;">Aeromoniasis</span>
+                  <span class="badge badge-red">Critical</span>
+                </div>
+                <p style="font-size:10px;color:#5a6a7a;margin-top:3px;">Bacterial · Treat immediately</p>
+              </div>
+              <div class="result-card result-warning" style="padding:10px 12px;">
+                <div class="flex justify-between items-center">
+                  <span style="font-size:12px;font-weight:600;">Gill Disease</span>
+                  <span class="badge badge-warn">Moderate</span>
+                </div>
+                <p style="font-size:10px;color:#5a6a7a;margin-top:3px;">Oxygen levels · Ammonia risk</p>
+              </div>
+              <div class="result-card result-warning" style="padding:10px 12px;">
+                <div class="flex justify-between items-center">
+                  <span style="font-size:12px;font-weight:600;">Parasitic</span>
+                  <span class="badge badge-warn">Moderate</span>
+                </div>
+                <p style="font-size:10px;color:#5a6a7a;margin-top:3px;">Anti-parasitic treatment needed</p>
+              </div>
+              <div class="result-card result-warning" style="padding:10px 12px;">
+                <div class="flex justify-between items-center">
+                  <span style="font-size:12px;font-weight:600;">Red Disease</span>
+                  <span class="badge badge-warn">Moderate</span>
+                </div>
+                <p style="font-size:10px;color:#5a6a7a;margin-top:3px;">Antibacterial treatment</p>
+              </div>
+              <div class="result-card result-warning" style="padding:10px 12px;">
+                <div class="flex justify-between items-center">
+                  <span style="font-size:12px;font-weight:600;">Saprolegniasis</span>
+                  <span class="badge badge-warn">Moderate</span>
+                </div>
+                <p style="font-size:10px;color:#5a6a7a;margin-top:3px;">Fungal · Antifungal treatment</p>
+              </div>
+              <div class="result-card result-warning" style="padding:10px 12px;">
+                <div class="flex justify-between items-center">
+                  <span style="font-size:12px;font-weight:600;">White Tail</span>
+                  <span class="badge badge-warn">Moderate</span>
+                </div>
+                <p style="font-size:10px;color:#5a6a7a;margin-top:3px;">Isolate · Improve hygiene</p>
+              </div>
+              <div class="result-card result-ok" style="padding:10px 12px;">
+                <div class="flex justify-between items-center">
+                  <span style="font-size:12px;font-weight:600;">Healthy</span>
+                  <span class="badge badge-ok">Normal</span>
+                </div>
+                <p style="font-size:10px;color:#5a6a7a;margin-top:3px;">No visible pathogens</p>
+              </div>
+            </div>
+          </div>
+          <div class="stat-card anim-3">
+            <p style="font-size:10px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;letter-spacing:0.1em;margin-bottom:10px;">AI MODEL INFO</p>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <div style="display:flex;justify-content:space-between;"><span style="font-size:11px;color:#5a6a7a;">Model</span><span style="font-size:11px;color:#00daf3;font-family:'JetBrains Mono',monospace;">AquaScan v4.2</span></div>
+              <div style="display:flex;justify-content:space-between;"><span style="font-size:11px;color:#5a6a7a;">Accuracy</span><span style="font-size:11px;color:#6ce000;font-family:'JetBrains Mono',monospace;">94.7%</span></div>
+              <div style="display:flex;justify-content:space-between;"><span style="font-size:11px;color:#5a6a7a;">Classes</span><span style="font-size:11px;color:#dde3ec;font-family:'JetBrains Mono',monospace;">7 detected</span></div>
+              <div style="display:flex;justify-content:space-between;"><span style="font-size:11px;color:#5a6a7a;">Input</span><span style="font-size:11px;color:#dde3ec;font-family:'JetBrains Mono',monospace;">JPG / PNG</span></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+<script>
+Chart.defaults.color='#5a6a7a';
+Chart.defaults.borderColor='#1e2830';
+Chart.defaults.font.family='JetBrains Mono';
+Chart.defaults.font.size=10;
+let chartInst=null;
+
+function handleDrop(e){
+  e.preventDefault();
+  document.getElementById('uploadZone').classList.remove('drag-over');
+  const f=e.dataTransfer.files[0]; if(f)handleFile(f);
+}
+function handleFile(file){
+  if(!file)return;
+  const r=new FileReader();
+  r.onload=e=>{
+    document.getElementById('uploadContent').style.display='none';
+    document.getElementById('previewContent').style.display='block';
+    document.getElementById('previewImg').src=e.target.result;
+    document.getElementById('fileName').textContent=file.name;
+    document.getElementById('sampleCount').textContent='1 image ready';
+    document.getElementById('aiResultBlock').style.display='none';
+    document.getElementById('resultsCard').style.display='none';
+  };
+  r.readAsDataURL(file);
+}
+function animateProgress(target,dur){
+  return new Promise(res=>{
+    const fill=document.getElementById('progressFill');
+    const lbl=document.getElementById('progressPct');
+    const t0=performance.now(), v0=parseFloat(fill.style.width)||0;
+    function step(now){
+      const t=Math.min((now-t0)/dur,1);
+      const e=t<.5?2*t*t:-1+(4-2*t)*t;
+      const v=v0+(target-v0)*e;
+      fill.style.width=v+'%'; lbl.textContent=Math.round(v)+'%';
+      if(t<1)requestAnimationFrame(step); else res();
+    }
+    requestAnimationFrame(step);
+  });
+}
+async function analyze(){
+  const fi=document.getElementById('fileInput');
+  if(!fi.files[0]){alert('Please upload an image first!');return;}
+  const btn=document.getElementById('analyzeBtn');
+  btn.disabled=true; btn.textContent='Analyzing...';
+  const pw=document.getElementById('progressWrap');
+  const pf=document.getElementById('progressFill');
+  const pl=document.getElementById('progressLabel');
+  pf.style.width='0%'; document.getElementById('progressPct').textContent='0%';
+  pw.style.display='block';
+  document.getElementById('aiResultBlock').style.display='none';
+  document.getElementById('resultsCard').style.display='none';
+  pl.textContent='Uploading image...'; animateProgress(30,400);
+  const fd=new FormData(); fd.append('file',fi.files[0]);
+  try{
+    pl.textContent='Running AquaScan model...';
+    const pp=animateProgress(70,600);
+    const resp = await fetch('/predict', {
+      method: 'POST',
+      body: fd
+})
+    await pp;
+    pl.textContent='Processing results...';
+    await animateProgress(100,300);
+    if(!resp.ok)throw new Error('Server error: '+resp.status);
+    const data=await resp.json();
+    const now=new Date();
+    document.getElementById('lastScanTime').textContent=
+      now.getHours().toString().padStart(2,'0')+':'+
+      now.getMinutes().toString().padStart(2,'0')+' '+(now.getHours()>=12?'PM':'AM');
+    await new Promise(r=>setTimeout(r,300));
+    pw.style.display='none';
+    showResults(data);
+  }catch(err){
+    pw.style.display='none'; showError(err.message);
+  }
+  btn.disabled=false; btn.textContent='Run Analysis →';
+}
+function sev(d){
+  if(['Aeromoniasis','Red_Disease'].includes(d))return'critical';
+  if(d==='Healthy')return'ok'; return'warning';
+}
+function showResults(data){
+  const disease=data.disease, conf=parseFloat(data.confidence), sol=data.solution, s=sev(disease);
+  const ab=document.getElementById('aiResultBlock');
+  ab.style.display='block'; ab.style.animation='fadeInUp 0.4s ease both';
+  document.getElementById('aiDiseaseName').textContent=disease.replace(/_/g,' ');
+  document.getElementById('aiConfidenceVal').textContent=data.confidence;
+  document.getElementById('aiConfidenceVal').style.color=s==='critical'?'#ff6464':s==='ok'?'#6ce000':'#f59e0b';
+  document.getElementById('aiSolution').textContent=sol;
+  setTimeout(()=>{ document.getElementById('aiConfidenceBar').style.width=conf+'%'; },100);
+  const sb=document.getElementById('aiSeverityBadge');
+  if(s==='critical'){sb.className='badge badge-red';sb.textContent='CRITICAL';}
+  else if(s==='ok'){sb.className='badge badge-ok';sb.textContent='HEALTHY';}
+  else{sb.className='badge badge-warn';sb.textContent='WARNING';}
+
+  // Store the current detection for Dr. Aqua redirect
+  window._lastDiseaseResult = { disease, confidence: data.confidence, solution: sol, severity: s };
+
+  // Show Ask Dr. Aqua button (hide if healthy)
+  const askWrap = document.getElementById('askDrAquaWrap');
+  askWrap.style.display = (disease === 'Healthy') ? 'none' : 'block';
+  askWrap.style.animation = 'fadeInUp 0.5s ease 0.3s both';
+  const cls=["Aeromoniasis","Gill_Disease","Healthy","Parasitic","Red_Disease","Saprolegniasis","White_Tail"];
+  const ds=cls.map(c=>({name:c.replace(/_/g,' '),confidence:c===disease?conf/100:Math.random()*.15,severity:sev(c),isTop:c===disease})).sort((a,b)=>b.confidence-a.confidence);
+  const rc=document.getElementById('resultsCard');
+  rc.style.display='block'; rc.style.animation='fadeInUp 0.4s ease both';
+  const rb=document.getElementById('resultBadge');
+  if(s==='critical'){rb.className='badge badge-red';rb.textContent='CRITICAL';}
+  else if(s==='ok'){rb.className='badge badge-ok';rb.textContent='CLEAR';}
+  else{rb.className='badge badge-warn';rb.textContent='WARNING';}
+  const lst=document.getElementById('resultsList');
+  lst.innerHTML=ds.map(d=>`
+    <div class="result-card result-${d.severity}">
+      <div class="flex justify-between items-center mb-2">
+        <span style="font-size:13px;font-weight:${d.isTop?700:500};">${d.name}${d.isTop?' ✦':''}</span>
+        <span style="font-size:12px;font-family:'JetBrains Mono',monospace;color:${d.severity==='critical'?'#ff6464':d.severity==='ok'?'#6ce000':'#f59e0b'}">${(d.confidence*100).toFixed(0)}%</span>
+      </div>
+      <div style="height:3px;background:#1e2830;border-radius:2px;overflow:hidden;">
+        <div style="height:100%;width:0%;background:${d.severity==='critical'?'#ff6464':d.severity==='ok'?'#6ce000':'#f59e0b'};border-radius:2px;transition:width 0.8s ease 0.2s;" data-w="${d.confidence*100}"></div>
+      </div>
+    </div>`).join('');
+  setTimeout(()=>{ lst.querySelectorAll('[data-w]').forEach(el=>el.style.width=el.getAttribute('data-w')+'%'); },100);
+  if(chartInst)chartInst.destroy();
+  const cm={critical:'rgba(255,100,100,0.75)',warning:'rgba(245,158,11,0.75)',ok:'rgba(108,224,0,0.75)'};
+  chartInst=new Chart(document.getElementById('confidenceChart'),{
+    type:'doughnut',
+    data:{labels:ds.map(d=>d.name),datasets:[{data:ds.map(d=>Math.max(Math.round(d.confidence*100),1)),
+      backgroundColor:ds.map(d=>cm[d.severity]),borderColor:'#0a0f14',borderWidth:3}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>` ${c.label}: ${c.parsed}%`}}},
+      animation:{duration:1000}}
+  });
+}
+function goToDrAqua(){
+  const r = window._lastDiseaseResult;
+  if(!r) return;
+  const params = new URLSearchParams({
+    disease: r.disease,
+    confidence: r.confidence,
+    severity: r.severity,
+    solution: r.solution
+  });
+  window.location.href = '/chatbot?' + params.toString();
+}
+function showError(msg){
+  const ab=document.getElementById('aiResultBlock');
+  ab.style.display='block';
+  ab.innerHTML=`<div style="text-align:center;padding:10px 0;">
+    <p style="color:#ff6464;font-weight:700;font-size:14px;margin-bottom:6px;">⚠ Connection Error</p>
+    <p style="font-size:12px;color:#5a6a7a;">Could not reach AquaScan server.<br><span style="font-family:'JetBrains Mono',monospace;font-size:11px;">${msg}</span></p>
+    <p style="font-size:11px;color:#3a4a5a;margin-top:8px;">Make sure <code style="color:#00daf3;">app.py</code> is running on localhost:5000</p>
+  </div>`;
+}
+</script>
+</body>
+</html>

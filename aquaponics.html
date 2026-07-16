@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aquaponics | The Living Lab</title>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;400;500;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: { extend: {
+        colors: { primary: "#00daf3", surface: "#0a0f14" },
+        fontFamily: { headline: ["Manrope"], mono: ["JetBrains Mono"] }
+      }}
+    };
+  </script>
+  <style>
+    * { box-sizing: border-box; }
+    body { background: #0a0f14; color: #dde3ec; font-family: 'Manrope', sans-serif; margin: 0; overflow: hidden; }
+    body::before { content:''; position:fixed;inset:0;background-image:linear-gradient(rgba(0,218,243,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,218,243,0.03) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0; }
+
+    .sidebar { width:220px;background:#0d1319;border-right:1px solid #1e2830;flex-shrink:0; }
+    .nav-item { display:flex;align-items:center;gap:10px;padding:12px 20px;color:#5a6a7a;font-size:13px;font-weight:500;cursor:pointer;transition:all 0.2s;border-left:2px solid transparent;text-decoration:none; }
+    .nav-item:hover { color:#00daf3;background:rgba(0,218,243,0.05); }
+    .nav-item.active { color:#00daf3;border-left-color:#00daf3;background:rgba(0,218,243,0.07); }
+    .nav-icon { font-size:16px;width:20px;text-align:center; }
+    .pulse-dot { width:8px;height:8px;border-radius:50%;background:#6ce000;animation:pulse-anim 2s infinite; }
+    @keyframes pulse-anim { 0%,100%{box-shadow:0 0 0 0 rgba(108,224,0,0.4)} 50%{box-shadow:0 0 0 6px rgba(108,224,0,0)} }
+
+    .stat-card { background:#111820;border:1px solid #1e2830;border-radius:14px;padding:20px; }
+    .badge { font-size:10px;padding:2px 8px;border-radius:20px;font-family:'JetBrains Mono',monospace;letter-spacing:0.05em;text-transform:uppercase; }
+    .badge-ok { background:rgba(108,224,0,0.1);color:#6ce000; }
+    .badge-cyan { background:rgba(0,218,243,0.1);color:#00daf3; }
+    .badge-green { background:rgba(108,224,0,0.1);color:#6ce000; }
+
+    ::-webkit-scrollbar { width:4px; } ::-webkit-scrollbar-track { background:transparent; } ::-webkit-scrollbar-thumb { background:#1e2830;border-radius:2px; }
+
+    #aquaponicsScene {
+      width: 100%; height: 480px; position: relative; overflow: visible;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    /* Fish swim using JS canvas-style via SMIL — see below for corrected SMIL */
+
+    /* Bubble rise */
+    @keyframes bubUp {
+      0%   { transform: translateY(0) translateX(0); opacity:0.9; }
+      60%  { transform: translateY(-44px) translateX(3px); opacity:0.5; }
+      100% { transform: translateY(-70px) translateX(-2px); opacity:0; }
+    }
+
+    /* Label float-in */
+    .iso-label { opacity: 0; animation: labelIn 0.5s ease forwards; }
+    @keyframes labelIn { to { opacity: 1; } }
+
+    /* Scroll sections */
+    .scroll-section { opacity: 0; transform: translateY(30px); transition: opacity 0.6s ease, transform 0.6s ease; }
+    .scroll-section.visible { opacity: 1; transform: translateY(0); }
+
+    .info-card { background: #111820; border: 1px solid #1e2830; border-radius: 14px; padding: 20px; transition: all 0.3s; }
+    .info-card:hover { border-color: rgba(0,218,243,0.2); transform: translateY(-2px); }
+
+    /* Plant card */
+    .plant-card { background:#111820;border:1px solid #1e2830;border-radius:16px;overflow:hidden;cursor:pointer;transition:all 0.3s cubic-bezier(0.34,1.2,0.64,1);display:flex;flex-direction:column; }
+    .plant-card:hover { border-color:rgba(108,224,0,0.4);transform:translateY(-6px);box-shadow:0 16px 48px rgba(0,0,0,0.5),0 0 24px rgba(108,224,0,0.08); }
+    .plant-img-zone { height:110px;background:#0d1a0d;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden; }
+    .plant-img-zone img { width:80px;height:80px;object-fit:contain;transition:transform 0.3s; }
+    .plant-card:hover .plant-img-zone img { transform:scale(1.12); }
+    .plant-img-zone .cat-badge { position:absolute;top:8px;left:8px; }
+
+    /* Filter buttons */
+    .filter-btn { padding:6px 14px;border-radius:20px;border:1px solid #1e2830;background:transparent;color:#5a6a7a;font-size:11px;font-family:'JetBrains Mono',monospace;cursor:pointer;transition:all 0.2s;letter-spacing:0.05em; }
+    .filter-btn:hover { border-color:rgba(108,224,0,0.4);color:#6ce000; }
+    .filter-btn.active { border-color:rgba(108,224,0,0.5);background:rgba(108,224,0,0.08);color:#6ce000; }
+
+    /* Progress bar */
+    .prog-bar { height:5px;background:#1e2830;border-radius:3px;overflow:hidden;margin-top:4px; }
+    .prog-fill { height:100%;border-radius:3px;transition:width 0.6s ease; }
+
+    /* Detail overlay */
+    .detail-row { display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid #1a2028; }
+    .detail-row:last-child { border-bottom:none; }
+    .detail-sec { background:#111820;border:1px solid #1e2830;border-radius:12px;padding:14px;margin-bottom:10px; }
+
+    @keyframes slideUp { from{opacity:0;transform:translateY(40px)} to{opacity:1;transform:translateY(0)} }
+
+    @keyframes fadeInUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+    .anim-1 { animation:fadeInUp 0.5s ease 0.1s both; }
+  </style>
+</head>
+<body class="flex overflow-hidden h-screen" style="position:relative;z-index:1;">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar flex flex-col h-screen" style="z-index:10;position:relative;">
+    <div class="px-5 py-6" style="border-bottom:1px solid #1e2830;">
+      <div class="flex items-center gap-3 mb-1">
+        <div style="width:28px;height:28px;background:linear-gradient(135deg,#00daf3,#0077ff);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#0a0f14;">L</div>
+        <span class="font-bold text-sm" style="color:#dde3ec;">Living Lab</span>
+      </div>
+      <p class="text-xs ml-10" style="color:#3a4a5a;font-family:'JetBrains Mono',monospace;">AQ-SYS v2.4</p>
+    </div>
+    <div class="px-5 py-4" style="border-bottom:1px solid #1e2830;">
+      <div class="flex items-center gap-2">
+        <div class="pulse-dot"></div>
+        <span style="font-size:11px;color:#6ce000;font-family:'JetBrains Mono',monospace;letter-spacing:0.05em;">ALL SENSORS ONLINE</span>
+      </div>
+    </div>
+    <nav class="flex-1 py-4">
+      <div class="px-5 mb-3" style="font-size:10px;color:#3a4a5a;letter-spacing:0.1em;font-family:'JetBrains Mono',monospace;">NAVIGATION</div>
+      <a href="/" class="nav-item"><span class="nav-icon">◈</span> Dashboard</a>
+      <a href="/list" class="nav-item"><span class="nav-icon">⊞</span> Fish Inventory</a>
+      <a href="/disease" class="nav-item"><span class="nav-icon">⬡</span> Disease Analysis</a>
+      <a href="/aquaponics" class="nav-item active"><span class="nav-icon">◎</span> Aquaponics</a>
+      <a href="/chatbot" class="nav-item"><span class="nav-icon">◬</span> AI Assistant</a>
+      <a href="/dimension" class="nav-item"><span class="nav-icon">◭</span> 3D Model</a>
+    </nav>
+    <div class="px-5 py-4" style="border-top:1px solid #1e2830;">
+      <div class="stat-card" style="padding:12px;">
+        <div class="flex justify-between items-center mb-1">
+          <span style="font-size:11px;color:#5a6a7a;">Ecosystem</span>
+          <span class="badge badge-ok">Active</span>
+        </div>
+        <p class="font-bold" style="color:#6ce000;font-size:13px;">Fish ↔ Plants</p>
+        <p style="font-size:10px;color:#5a6a7a;margin-top:2px;">Nitrogen cycle healthy</p>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="flex-1 flex flex-col overflow-hidden" style="position:relative;z-index:1;">
+    <header class="flex justify-between items-center px-8 h-14 flex-shrink-0" style="border-bottom:1px solid #1e2830;background:rgba(10,15,20,0.9);backdrop-filter:blur(20px);">
+      <div>
+        <h1 class="font-bold text-sm" style="color:#dde3ec;">Aquaponics System</h1>
+        <p style="font-size:11px;color:#3a4a5a;font-family:'JetBrains Mono',monospace;">Integrated fish + plant ecosystem · Scroll to explore</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <span class="badge badge-ok">NITROGEN CYCLE STABLE</span>
+        <span class="badge badge-cyan">LIVE</span>
+      </div>
+    </header>
+
+    <main class="flex-1 overflow-y-auto" id="mainScroll" style="scroll-behavior:smooth;">
+      <div style="padding:32px 40px;">
+
+        <!-- 3D MODEL SCENE -->
+        <div class="anim-1 mb-8">
+          <div style="text-align:center;margin-bottom:16px;">
+            <p style="font-size:10px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;letter-spacing:0.15em;">◎ LIVE AQUAPONICS MODEL · 3D VIEW</p>
+          </div>
+
+          <div id="aquaponicsScene">
+            <svg id="isoSvg" viewBox="0 0 820 460" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:820px;height:460px;overflow:visible;">
+              <defs>
+                <linearGradient id="waterGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#003c7a" stop-opacity="0.85"/>
+                  <stop offset="100%" stop-color="#001840" stop-opacity="0.95"/>
+                </linearGradient>
+                <linearGradient id="waterTop" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stop-color="#00daf3" stop-opacity="0.2"/>
+                  <stop offset="40%" stop-color="#00daf3" stop-opacity="0.55"/>
+                  <stop offset="70%" stop-color="#00aad0" stop-opacity="0.4"/>
+                  <stop offset="100%" stop-color="#00daf3" stop-opacity="0.2"/>
+                </linearGradient>
+                <linearGradient id="soilGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#2a4a28"/>
+                  <stop offset="100%" stop-color="#1a3018"/>
+                </linearGradient>
+                <linearGradient id="ctrlGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#1e2e3e"/>
+                  <stop offset="100%" stop-color="#131e2a"/>
+                </linearGradient>
+                <linearGradient id="bedGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#1e2830"/>
+                  <stop offset="100%" stop-color="#141e26"/>
+                </linearGradient>
+                <linearGradient id="tankSideGrad" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stop-color="#0d1e34"/>
+                  <stop offset="100%" stop-color="#0a1828"/>
+                </linearGradient>
+                <linearGradient id="pipeFlow" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#00daf3" stop-opacity="0.9"/>
+                  <stop offset="100%" stop-color="#0077cc" stop-opacity="0.6"/>
+                </linearGradient>
+                <clipPath id="tankClip">
+                  <rect x="48" y="238" width="310" height="148"/>
+                </clipPath>
+                <clipPath id="bedClip">
+                  <rect x="390" y="100" width="290" height="160"/>
+                </clipPath>
+                <filter id="softShadow" x="-10%" y="-10%" width="130%" height="140%">
+                  <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000" flood-opacity="0.5"/>
+                </filter>
+                <filter id="glowCyan" x="-20%" y="-20%" width="140%" height="140%">
+                  <feDropShadow dx="0" dy="0" stdDeviation="4" flood-color="#00daf3" flood-opacity="0.7"/>
+                </filter>
+              </defs>
+
+              <!-- ===== FISH TANK ===== -->
+              <rect x="44" y="230" width="318" height="164" rx="6" fill="#000" fill-opacity="0.4" transform="translate(4,8)"/>
+              <rect x="44" y="230" width="318" height="164" rx="6" fill="#0a1520" stroke="#1e3050" stroke-width="1.5"/>
+              <rect x="48" y="238" width="310" height="148" rx="3" fill="url(#waterGrad)" clip-path="url(#tankClip)"/>
+              <rect x="48" y="238" width="6" height="148" fill="#001840" opacity="0.6"/>
+              <rect x="48" y="238" width="310" height="10" rx="2" fill="url(#waterTop)" opacity="0.9">
+                <animate attributeName="opacity" values="0.7;1;0.7" dur="3s" repeatCount="indefinite"/>
+              </rect>
+
+              <!-- ===== FISH (JS-driven, rendered as canvas overlay) ===== -->
+              <!-- Fish are drawn via JS canvas on top of SVG for correct direction control -->
+
+              <!-- Bubbles inside tank -->
+              <g clip-path="url(#tankClip)">
+                <circle cx="90"  cy="380" r="3" fill="none" stroke="#00daf3" stroke-width="1" opacity="0.7">
+                  <animate attributeName="cy" values="385;240;240" dur="2.8s" repeatCount="indefinite"/>
+                  <animate attributeName="opacity" values="0.8;0.2;0" dur="2.8s" repeatCount="indefinite"/>
+                </circle>
+                <circle cx="180" cy="370" r="2" fill="none" stroke="#00daf3" stroke-width="1" opacity="0.6">
+                  <animate attributeName="cy" values="370;240;240" dur="2.2s" begin="0.7s" repeatCount="indefinite"/>
+                  <animate attributeName="opacity" values="0.8;0.2;0" dur="2.2s" begin="0.7s" repeatCount="indefinite"/>
+                </circle>
+                <circle cx="270" cy="360" r="3.5" fill="none" stroke="#00daf3" stroke-width="1" opacity="0.5">
+                  <animate attributeName="cy" values="375;238;238" dur="3.4s" begin="1.4s" repeatCount="indefinite"/>
+                  <animate attributeName="opacity" values="0.7;0.2;0" dur="3.4s" begin="1.4s" repeatCount="indefinite"/>
+                </circle>
+                <circle cx="330" cy="360" r="2" fill="none" stroke="#00daf3" stroke-width="1" opacity="0.6">
+                  <animate attributeName="cy" values="380;238;238" dur="2.6s" begin="2s" repeatCount="indefinite"/>
+                  <animate attributeName="opacity" values="0.8;0;0" dur="2.6s" begin="2s" repeatCount="indefinite"/>
+                </circle>
+              </g>
+
+              <!-- Tank glass shine -->
+              <rect x="50" y="240" width="8" height="140" fill="white" opacity="0.04" rx="2"/>
+              <!-- Tank frame -->
+              <rect x="44" y="230" width="318" height="164" rx="6" fill="none" stroke="#2a4060" stroke-width="2"/>
+              <!-- Tank top rim -->
+              <rect x="44" y="228" width="318" height="10" rx="3" fill="#1a2e44" stroke="#2a4060" stroke-width="1"/>
+              <!-- Tank label -->
+              <text x="203" y="222" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" fill="#5a6a7a" letter-spacing="1">FISH TANK</text>
+
+              <!-- Fish food pipe -->
+              <ellipse cx="46" cy="240" rx="12" ry="8" fill="#5a4020" stroke="#7a5828" stroke-width="1.5" transform="rotate(-15 46 240)"/>
+              <rect x="30" y="232" width="18" height="12" rx="3" fill="#6a4a20" stroke="#8a6030" stroke-width="1" transform="rotate(-15 39 238)"/>
+              <circle cx="50" cy="250" r="2" fill="#c4a050" opacity="0.8">
+                <animate attributeName="cy" values="242;252;262" dur="1s" repeatCount="indefinite"/>
+                <animate attributeName="opacity" values="0.8;0.6;0" dur="1s" repeatCount="indefinite"/>
+              </circle>
+              <circle cx="55" cy="248" r="1.5" fill="#c4a050" opacity="0.7">
+                <animate attributeName="cy" values="240;254;264" dur="1.3s" begin="0.3s" repeatCount="indefinite"/>
+                <animate attributeName="opacity" values="0.7;0.5;0" dur="1.3s" begin="0.3s" repeatCount="indefinite"/>
+              </circle>
+
+              <!-- Filtered water outlet -->
+              <rect x="10" y="360" width="44" height="10" rx="4" fill="#1a3050" stroke="#2a4060" stroke-width="1"/>
+              <rect x="8" y="355" width="14" height="20" rx="3" fill="#1a3050" stroke="#2a4060" stroke-width="1"/>
+              <rect x="12" y="362" width="38" height="6" rx="3" fill="none" stroke="#00daf3" stroke-width="1.5" stroke-dasharray="6 4" opacity="0.6">
+                <animate attributeName="stroke-dashoffset" values="0;-20" dur="1s" repeatCount="indefinite"/>
+              </rect>
+
+              <!-- Down pipe from tank to pump -->
+              <rect x="196" y="394" width="10" height="36" rx="4" fill="#1e3858" stroke="#2a4e78" stroke-width="1"/>
+              <rect x="199" y="396" width="4" height="32" rx="2" fill="#00daf3" opacity="0.3">
+                <animate attributeName="opacity" values="0.2;0.5;0.2" dur="1.5s" repeatCount="indefinite"/>
+              </rect>
+
+              <!-- Water pump -->
+              <rect x="176" y="425" width="54" height="32" rx="6" fill="#0d1e34" stroke="#1e3858" stroke-width="1.5" filter="url(#softShadow)"/>
+              <rect x="182" y="431" width="22" height="20" rx="3" fill="#131e2a" stroke="#2a4e78" stroke-width="1"/>
+              <circle cx="193" cy="441" r="6" fill="none" stroke="#00daf3" stroke-width="1.5" opacity="0.8">
+                <animateTransform attributeName="transform" type="rotate" values="0 193 441;360 193 441" dur="1.2s" repeatCount="indefinite"/>
+              </circle>
+              <circle cx="193" cy="441" r="3" fill="#00daf3" opacity="0.5">
+                <animate attributeName="opacity" values="0.4;0.9;0.4" dur="1.2s" repeatCount="indefinite"/>
+              </circle>
+              <circle cx="218" cy="434" r="4" fill="#00daf3" filter="url(#glowCyan)">
+                <animate attributeName="opacity" values="1;0.3;1" dur="1.2s" repeatCount="indefinite"/>
+              </circle>
+              <text x="203" y="459" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8" fill="#00daf3" letter-spacing="0.5">WATER PUMP</text>
+
+              <!-- Vertical pipe up -->
+              <rect x="196" y="280" width="10" height="148" rx="4" fill="#1e3858" stroke="#2a4e78" stroke-width="1"/>
+              <rect x="199" y="282" width="4" height="144" rx="2" fill="url(#pipeFlow)" opacity="0.5">
+                <animate attributeName="opacity" values="0.3;0.7;0.3" dur="2s" repeatCount="indefinite"/>
+              </rect>
+              <rect x="200" y="282" width="2" height="144" rx="1" fill="none" stroke="#00daf3" stroke-width="2" stroke-dasharray="8 10" opacity="0.4">
+                <animate attributeName="stroke-dashoffset" values="0;-36" dur="1s" repeatCount="indefinite"/>
+              </rect>
+
+              <!-- Horizontal pipe to grow bed -->
+              <rect x="200" y="278" width="192" height="10" rx="4" fill="#1e3858" stroke="#2a4e78" stroke-width="1"/>
+              <rect x="202" y="280" width="188" height="6" rx="2" fill="none" stroke="#00daf3" stroke-width="1.5" stroke-dasharray="8 6" opacity="0.4">
+                <animate attributeName="stroke-dashoffset" values="0;-28" dur="0.9s" repeatCount="indefinite"/>
+              </rect>
+
+              <!-- Return pipe grow bed → tank -->
+              <rect x="648" y="170" width="10" height="120" rx="4" fill="#1e3858" stroke="#2a4e78" stroke-width="1"/>
+              <rect x="651" y="172" width="4" height="116" rx="2" fill="#00daf3" opacity="0.25">
+                <animate attributeName="opacity" values="0.15;0.4;0.15" dur="2.5s" repeatCount="indefinite"/>
+              </rect>
+              <rect x="360" y="170" width="300" height="10" rx="4" fill="#1e3858" stroke="#2a4e78" stroke-width="1"/>
+              <rect x="362" y="172" width="296" height="6" rx="2" fill="none" stroke="#00daf3" stroke-width="1.5" stroke-dasharray="8 6" opacity="0.35">
+                <animate attributeName="stroke-dashoffset" values="0;28" dur="1.1s" repeatCount="indefinite"/>
+              </rect>
+              <rect x="360" y="170" width="10" height="68" rx="4" fill="#1e3858" stroke="#2a4e78" stroke-width="1"/>
+
+              <!-- Water drip into tank -->
+              <circle cx="365" cy="242" r="3" fill="#00daf3" opacity="0">
+                <animate attributeName="cy" values="235;246;260" dur="1.2s" repeatCount="indefinite"/>
+                <animate attributeName="opacity" values="0;0.8;0" dur="1.2s" repeatCount="indefinite"/>
+              </circle>
+              <circle cx="361" cy="242" r="2" fill="#00daf3" opacity="0">
+                <animate attributeName="cy" values="232;244;256" dur="1.6s" begin="0.4s" repeatCount="indefinite"/>
+                <animate attributeName="opacity" values="0;0.6;0" dur="1.6s" begin="0.4s" repeatCount="indefinite"/>
+              </circle>
+
+              <!-- ===== GROW BED ===== -->
+              <rect x="390" y="96" width="268" height="172" rx="6" fill="#000" fill-opacity="0.35" transform="translate(4,8)"/>
+              <rect x="390" y="96" width="268" height="172" rx="6" fill="url(#bedGrad)" stroke="#2a3a4a" stroke-width="2" filter="url(#softShadow)"/>
+              <rect x="390" y="250" width="268" height="18" rx="0 0 6 6" fill="#0d1520" stroke="#1e2a38" stroke-width="1"/>
+              <rect x="396" y="180" width="256" height="80" rx="3" fill="url(#soilGrad)" clip-path="url(#bedClip)"/>
+              <circle cx="420" cy="220" r="2" fill="#1a3818" opacity="0.6"/>
+              <circle cx="460" cy="210" r="2.5" fill="#1a3818" opacity="0.5"/>
+              <circle cx="510" cy="225" r="2" fill="#1a3818" opacity="0.6"/>
+              <circle cx="560" cy="215" r="2" fill="#1a3818" opacity="0.5"/>
+              <circle cx="610" cy="220" r="2.5" fill="#1a3818" opacity="0.6"/>
+              <circle cx="635" cy="210" r="2" fill="#1a3818" opacity="0.5"/>
+              <rect x="400" y="204" width="248" height="4" rx="2" fill="#1e3050" stroke="#2a4060" stroke-width="0.5" opacity="0.8"/>
+              <rect x="400" y="220" width="248" height="4" rx="2" fill="#1e3050" stroke="#2a4060" stroke-width="0.5" opacity="0.8"/>
+              <rect x="400" y="236" width="248" height="4" rx="2" fill="#1e3050" stroke="#2a4060" stroke-width="0.5" opacity="0.8"/>
+              <circle cx="430" cy="206" r="2" fill="#00daf3" opacity="0.6"/>
+              <circle cx="490" cy="222" r="2" fill="#00daf3" opacity="0.6"/>
+              <circle cx="550" cy="206" r="2" fill="#00daf3" opacity="0.6"/>
+              <circle cx="610" cy="222" r="2" fill="#00daf3" opacity="0.6"/>
+
+              <!-- ===== PLANTS (STATIONARY — no animateTransform) ===== -->
+              <!-- Plant 1 -->
+              <g transform="translate(415, 195)">
+                <line x1="0" y1="0" x2="-8" y2="-22" stroke="#2a6020" stroke-width="2"/>
+                <ellipse cx="-8" cy="-22" rx="10" ry="6" fill="#3a8828" opacity="0.9"/>
+                <line x1="0" y1="-5" x2="8" y2="-18" stroke="#2a6020" stroke-width="2"/>
+                <ellipse cx="9" cy="-19" rx="8" ry="5" fill="#4a9830" opacity="0.9"/>
+                <line x1="0" y1="-10" x2="0" y2="-30" stroke="#2a6020" stroke-width="2"/>
+                <ellipse cx="0" cy="-32" rx="9" ry="5.5" fill="#55aa36" opacity="0.95"/>
+              </g>
+              <!-- Plant 2 -->
+              <g transform="translate(467, 195)">
+                <line x1="0" y1="0" x2="-10" y2="-28" stroke="#2a6020" stroke-width="2"/>
+                <ellipse cx="-10" cy="-28" rx="11" ry="6.5" fill="#3a8828" opacity="0.9"/>
+                <line x1="0" y1="-8" x2="9" y2="-24" stroke="#2a6020" stroke-width="2"/>
+                <ellipse cx="10" cy="-25" rx="9" ry="5.5" fill="#4a9830" opacity="0.9"/>
+                <line x1="0" y1="-15" x2="0" y2="-38" stroke="#2a6020" stroke-width="2"/>
+                <ellipse cx="0" cy="-40" rx="10" ry="6" fill="#55aa36" opacity="0.95"/>
+              </g>
+              <!-- Plant 3 -->
+              <g transform="translate(520, 195)">
+                <line x1="0" y1="0" x2="-9" y2="-25" stroke="#2a6020" stroke-width="2"/>
+                <ellipse cx="-9" cy="-25" rx="11" ry="6" fill="#3a8828" opacity="0.9"/>
+                <line x1="0" y1="-6" x2="10" y2="-20" stroke="#2a6020" stroke-width="2"/>
+                <ellipse cx="11" cy="-21" rx="10" ry="5.5" fill="#4a9830" opacity="0.9"/>
+                <line x1="0" y1="-12" x2="1" y2="-35" stroke="#2a6020" stroke-width="2"/>
+                <ellipse cx="1" cy="-37" rx="10" ry="6" fill="#55aa36" opacity="0.95"/>
+              </g>
+              <!-- Plant 4 -->
+              <g transform="translate(572, 195)">
+                <line x1="0" y1="0" x2="-8" y2="-20" stroke="#2a6020" stroke-width="2"/>
+                <ellipse cx="-8" cy="-20" rx="9" ry="5.5" fill="#3a8828" opacity="0.9"/>
+                <line x1="0" y1="-5" x2="8" y2="-18" stroke="#2a6020" stroke-width="2"/>
+                <ellipse cx="9" cy="-19" rx="8" ry="5" fill="#4a9830" opacity="0.9"/>
+                <line x1="0" y1="-8" x2="0" y2="-28" stroke="#2a6020" stroke-width="2"/>
+                <ellipse cx="0" cy="-30" rx="9" ry="5.5" fill="#55aa36" opacity="0.95"/>
+              </g>
+              <!-- Plant 5 -->
+              <g transform="translate(622, 195)">
+                <line x1="0" y1="0" x2="-10" y2="-26" stroke="#2a6020" stroke-width="2"/>
+                <ellipse cx="-10" cy="-26" rx="10" ry="6" fill="#3a8828" opacity="0.9"/>
+                <line x1="0" y1="-7" x2="9" y2="-22" stroke="#2a6020" stroke-width="2"/>
+                <ellipse cx="10" cy="-23" rx="9" ry="5.5" fill="#4a9830" opacity="0.9"/>
+                <line x1="0" y1="-14" x2="0" y2="-33" stroke="#2a6020" stroke-width="2"/>
+                <ellipse cx="0" cy="-35" rx="9" ry="5.5" fill="#55aa36" opacity="0.95"/>
+              </g>
+
+              <!-- Roots -->
+              <line x1="415" y1="260" x2="413" y2="276" stroke="#8a6030" stroke-width="1" opacity="0.6"/>
+              <line x1="468" y1="260" x2="466" y2="278" stroke="#8a6030" stroke-width="1" opacity="0.6"/>
+              <line x1="520" y1="260" x2="518" y2="275" stroke="#8a6030" stroke-width="1" opacity="0.6"/>
+              <line x1="572" y1="260" x2="570" y2="280" stroke="#8a6030" stroke-width="1" opacity="0.6"/>
+
+              <!-- Grow bed top rim -->
+              <rect x="390" y="96" width="268" height="18" rx="6 6 0 0" fill="#1e2e40" stroke="#2a3e54" stroke-width="1.5"/>
+              <text x="524" y="89" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" fill="#6ce000" letter-spacing="1">GROW BED</text>
+
+              <!-- Water controller -->
+              <rect x="700" y="148" width="72" height="88" rx="8" fill="url(#ctrlGrad)" stroke="#2a3e54" stroke-width="1.5" filter="url(#softShadow)"/>
+              <rect x="708" y="158" width="56" height="32" rx="4" fill="#0a1a2a" stroke="#1a3050" stroke-width="1"/>
+              <text x="736" y="172" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="7" fill="#00daf3">28.4°C</text>
+              <text x="736" y="182" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="6" fill="#6ce000">pH 7.2</text>
+              <path d="M726,202 Q736,194 746,202" fill="none" stroke="#00daf3" stroke-width="1.5" opacity="0.9">
+                <animate attributeName="opacity" values="0.3;1;0.3" dur="2s" repeatCount="indefinite"/>
+              </path>
+              <path d="M720,208 Q736,196 752,208" fill="none" stroke="#00daf3" stroke-width="1.5" opacity="0.5">
+                <animate attributeName="opacity" values="0.1;0.6;0.1" dur="2s" begin="0.3s" repeatCount="indefinite"/>
+              </path>
+              <circle cx="736" cy="213" r="2.5" fill="#00daf3">
+                <animate attributeName="opacity" values="0.5;1;0.5" dur="2s" repeatCount="indefinite"/>
+              </circle>
+              <rect x="654" y="178" width="50" height="8" rx="3" fill="#1e3858" stroke="#2a4e78" stroke-width="1"/>
+
+              <!-- Level sensor -->
+              <rect x="308" y="254" width="40" height="56" rx="4" fill="#0d1e34" stroke="#1a3050" stroke-width="1.5"/>
+              <rect x="316" y="262" width="24" height="40" rx="2" fill="#0a1428" stroke="#1e3050" stroke-width="1"/>
+              <rect x="320" y="295" width="16" height="5" rx="1" fill="#00daf3" opacity="0.9">
+                <animate attributeName="y" values="290;298;290" dur="3s" repeatCount="indefinite"/>
+              </rect>
+              <rect x="320" y="275" width="16" height="3" rx="1" fill="#00daf3" opacity="0.4"/>
+              <text x="328" y="322" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="7" fill="#00daf3">LVL</text>
+
+              <!-- Labels -->
+              <g class="iso-label" style="animation-delay:0.2s">
+                <rect x="484" y="128" width="156" height="26" rx="5" fill="#1a2e44" stroke="#00daf3" stroke-width="1" opacity="0.92"/>
+                <text x="562" y="145" text-anchor="middle" font-family="Manrope, sans-serif" font-size="11" font-weight="700" fill="#00daf3">Nutrient Rich Water</text>
+                <line x1="562" y1="154" x2="562" y2="174" stroke="#00daf3" stroke-width="1" stroke-dasharray="3 2" opacity="0.5"/>
+              </g>
+              <g class="iso-label" style="animation-delay:0.4s">
+                <rect x="704" y="108" width="112" height="26" rx="5" fill="#1a2e44" stroke="#00daf3" stroke-width="1" opacity="0.92"/>
+                <text x="760" y="125" text-anchor="middle" font-family="Manrope, sans-serif" font-size="11" font-weight="700" fill="#00daf3">Water Controller</text>
+                <line x1="736" y1="134" x2="736" y2="148" stroke="#00daf3" stroke-width="1" stroke-dasharray="3 2" opacity="0.5"/>
+              </g>
+              <g class="iso-label" style="animation-delay:0.5s">
+                <rect x="360" y="244" width="100" height="26" rx="5" fill="#1a2e44" stroke="#00daf3" stroke-width="1" opacity="0.92"/>
+                <text x="410" y="261" text-anchor="middle" font-family="Manrope, sans-serif" font-size="11" font-weight="700" fill="#00daf3">Level Sensor</text>
+                <line x1="360" y1="265" x2="350" y2="270" stroke="#00daf3" stroke-width="1" stroke-dasharray="3 2" opacity="0.5"/>
+              </g>
+              <g class="iso-label" style="animation-delay:0.1s">
+                <rect x="0" y="218" width="92" height="26" rx="5" fill="#1a2e44" stroke="#f59e0b" stroke-width="1" opacity="0.92"/>
+                <text x="46" y="235" text-anchor="middle" font-family="Manrope, sans-serif" font-size="11" font-weight="700" fill="#f59e0b">Fish Foods</text>
+                <line x1="46" y1="244" x2="40" y2="252" stroke="#f59e0b" stroke-width="1" stroke-dasharray="3 2" opacity="0.5"/>
+              </g>
+              <g class="iso-label" style="animation-delay:0.3s">
+                <rect x="0" y="352" width="110" height="26" rx="5" fill="#1a2e44" stroke="#6ce000" stroke-width="1" opacity="0.92"/>
+                <text x="55" y="369" text-anchor="middle" font-family="Manrope, sans-serif" font-size="11" font-weight="700" fill="#6ce000">Filtered Water</text>
+                <line x1="55" y1="378" x2="54" y2="368" stroke="#6ce000" stroke-width="1" stroke-dasharray="3 2" opacity="0.5"/>
+              </g>
+              <g class="iso-label" style="animation-delay:0.6s">
+                <rect x="154" y="455" width="98" height="26" rx="5" fill="#1a2e44" stroke="#00daf3" stroke-width="1" opacity="0.92"/>
+                <text x="203" y="472" text-anchor="middle" font-family="Manrope, sans-serif" font-size="11" font-weight="700" fill="#00daf3">Water Pump</text>
+              </g>
+
+              <!-- Jumping fish (JS-controlled) -->
+              <g id="jumpFishSvg" opacity="0" pointer-events="none">
+                <text id="jumpFishText" font-size="20" x="100" y="238">🐟</text>
+              </g>
+
+            </svg>
+          </div>
+
+          <div style="text-align:center;margin-top:20px;">
+            <p style="font-size:11px;color:#3a4a5a;font-family:'JetBrains Mono',monospace;letter-spacing:0.08em;">↓ SCROLL DOWN TO EXPLORE THE SYSTEM</p>
+          </div>
+        </div>
+
+        <!-- AQUAPONICS SECTION -->
+        <div class="scroll-section" id="section-main" style="margin-bottom:48px;">
+          <div style="display:flex;align-items:center;gap:16px;margin-bottom:8px;">
+            <div style="flex:1;height:1px;background:linear-gradient(90deg,transparent,#1e2830);"></div>
+            <h2 style="font-size:28px;font-weight:800;letter-spacing:-0.5px;color:#dde3ec;white-space:nowrap;">Aquaponics</h2>
+            <div style="flex:1;height:1px;background:linear-gradient(90deg,#1e2830,transparent);"></div>
+          </div>
+          <p style="text-align:center;font-size:12px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;letter-spacing:0.1em;margin-bottom:32px;">SOUTH INDIAN VEGETABLES · SUITABLE FOR AQUAPONICS WITH LOCAL FRESHWATER FISH</p>
+
+          <!-- Plants subsection -->
+          <div class="scroll-section" id="section-plants">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
+              <h3 style="font-size:18px;font-weight:700;color:#6ce000;">Plant Varieties</h3>
+              <span class="badge badge-green" style="margin-left:auto;">25 SPECIES</span>
+            </div>
+
+            <!-- Filter pills -->
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:24px;" id="filterRow">
+              <button class="filter-btn active" data-filter="all">All</button>
+              <button class="filter-btn" data-filter="leafy">Leafy</button>
+              <button class="filter-btn" data-filter="fruiting">Fruiting</button>
+              <button class="filter-btn" data-filter="root">Root</button>
+              <button class="filter-btn" data-filter="herb">Herb</button>
+            </div>
+
+            <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px;" id="plantGrid"></div>
+          </div>
+        </div>
+
+        <div style="height:40px;"></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ══ PLANT DETAIL OVERLAY ══ -->
+  <div id="plantOverlay" style="position:fixed;inset:0;z-index:200;background:rgba(5,8,12,0.88);backdrop-filter:blur(14px);display:none;align-items:center;justify-content:center;" onclick="closePlantOverlay(event)">
+    <div id="plantPanel" style="background:#0d1319;border:1px solid #1e2830;border-radius:24px;width:620px;max-height:88vh;overflow-y:auto;padding:32px;position:relative;animation:slideUp 0.35s cubic-bezier(0.34,1.2,0.64,1) both;">
+      <button onclick="closePlantOverlay()" style="position:absolute;top:18px;right:18px;width:32px;height:32px;border-radius:50%;background:#1e2830;border:none;color:#5a6a7a;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;">✕</button>
+      <div id="plantDetailContent"></div>
+    </div>
+
+  </div>
+<script>
+// ===== SCROLL REVEAL =====
+const scrollEl = document.getElementById('mainScroll');
+const sections = document.querySelectorAll('.scroll-section');
+function checkVisibility() {
+  sections.forEach(section => {
+    const rect = section.getBoundingClientRect();
+    const containerRect = scrollEl.getBoundingClientRect();
+    if (rect.top < containerRect.bottom - 60) section.classList.add('visible');
+  });
+}
+scrollEl.addEventListener('scroll', checkVisibility);
+setTimeout(checkVisibility, 300);
+
+// ===== JS-DRIVEN FISH ANIMATION =====
+const svgEl = document.getElementById('isoSvg');
+const scene = document.getElementById('aquaponicsScene');
+const fc = document.createElement('canvas');
+fc.style.position = 'absolute'; fc.style.pointerEvents = 'none';
+fc.style.top = '0'; fc.style.left = '0';
+scene.appendChild(fc);
+
+const fishAnimData = [
+  { emoji: '🐟', size: 20, x: 80,  y: 285, speed: 28, dir: 1 },
+  { emoji: '🐠', size: 16, x: 240, y: 320, speed: 20, dir: -1 },
+  { emoji: '🐡', size: 18, x: 140, y: 350, speed: 24, dir: 1 },
+];
+const SVG_W = 820, SVG_H = 460, TANK_X1 = 52, TANK_X2 = 354;
+
+function resizeCanvas() { fc.width = scene.offsetWidth; fc.height = scene.offsetHeight; }
+resizeCanvas(); window.addEventListener('resize', resizeCanvas);
+
+let lastTime = null;
+function animateFish(ts) {
+  if (!lastTime) lastTime = ts;
+  const dt = (ts - lastTime) / 1000; lastTime = ts;
+  const ctx = fc.getContext('2d'); ctx.clearRect(0, 0, fc.width, fc.height);
+  const rect = svgEl.getBoundingClientRect();
+  const sceneRect = scene.getBoundingClientRect();
+  const scaleX = rect.width / SVG_W, scaleY = rect.height / SVG_H;
+  const offX = rect.left - sceneRect.left, offY = rect.top - sceneRect.top;
+  fishAnimData.forEach(f => {
+    f.x += f.dir * f.speed * dt;
+    if (f.dir === 1 && f.x >= TANK_X2 - 10) { f.x = TANK_X2 - 10; f.dir = -1; }
+    else if (f.dir === -1 && f.x <= TANK_X1 + 10) { f.x = TANK_X1 + 10; f.dir = 1; }
+    const cx = offX + f.x * scaleX, cy = offY + f.y * scaleY;
+    const fontSize = Math.round(f.size * scaleY);
+    ctx.save(); ctx.font = `${fontSize}px serif`; ctx.textBaseline = 'middle';
+    if (f.dir === 1) { ctx.translate(cx, cy); ctx.scale(-1,1); ctx.fillText(f.emoji, -fontSize*0.5, 0); }
+    else { ctx.fillText(f.emoji, cx - fontSize*0.5, cy); }
+    ctx.restore();
+  });
+  requestAnimationFrame(animateFish);
+}
+requestAnimationFrame(animateFish);
+
+function triggerJump() {
+  const g = document.getElementById('jumpFishSvg'), txt = document.getElementById('jumpFishText');
+  const startX = 80 + Math.random()*200, waterY = 238;
+  txt.setAttribute('x', startX); txt.setAttribute('y', waterY); g.setAttribute('opacity','1');
+  let fi = 0; const total = 70, arcHeight = 80;
+  const raf = setInterval(() => {
+    if (fi > total) {
+      if (fi <= total + 8) { const sp=(fi-total)/8; txt.setAttribute('y', waterY+sp*20); g.setAttribute('opacity',String(1-sp)); }
+      else { g.setAttribute('opacity','0'); clearInterval(raf); }
+      fi++; return;
+    }
+    const p = fi/total, x = startX+p*60, y = waterY - Math.sin(p*Math.PI)*arcHeight;
+    txt.setAttribute('x',x); txt.setAttribute('y',y);
+    txt.setAttribute('transform',`rotate(${-50*Math.sin(p*Math.PI)} ${x+10} ${y})`);
+    fi++;
+  }, 18);
+}
+function scheduleJump() { setTimeout(()=>{ triggerJump(); scheduleJump(); }, 4000+Math.random()*5000); }
+setTimeout(scheduleJump, 2500);
+
+/* ═══════════════════════════════════════════════════════
+   PLANT DATA — 25 Indian South vegetable varieties
+   researched for compatibility with South Indian freshwater
+   fish (Rohu, Catla, Tilapia, Mrigal, Common Carp etc.)
+═══════════════════════════════════════════════════════ */
+const plants = [
+  {
+    id:'spinach', name:'Palak (Spinach)', local:'பாலக்', latin:'Spinacia oleracea', cat:'leafy',
+    img:'/static/plants/spinach.png',
+    ph:'6.0 – 7.5', temp:'15 – 25°C', harvest:'30 – 45 days', light:'Full sun / partial shade',
+    growth:88, survival:92, profit:75,
+    yield:'2 – 3 kg/m²/cycle', spacing:'15 cm', system:'NFT / DWC / Media bed',
+    fishCompat:'Excellent with Rohu, Catla, Tilapia — high nitrogen uptake matches fish waste load.',
+    desc:'One of the fastest and easiest leafy greens in aquaponics. Palak thrives in South Indian climate year-round, grows rapidly under warm conditions, and absorbs nitrates very efficiently. Low-maintenance and commands good retail price.',
+    tips:'Harvest outer leaves continuously for multiple pickings. Best sown Oct–Feb.',
+    profitNote:'₹40–60/kg · high turnover · 6–8 cycles/year possible'
+  },
+  {
+    id:'kangkong', name:'Water Spinach (Kangkong)', local:'வள்ளி கீரை', latin:'Ipomoea aquatica', cat:'leafy',
+    img:'/static/plants/kangkong.png',
+    ph:'6.0 – 7.5', temp:'25 – 35°C', harvest:'20 – 30 days', light:'Full sun',
+    growth:95, survival:96, profit:70,
+    yield:'4 – 6 kg/m²/cycle', spacing:'20 cm', system:'Floating raft / Media bed',
+    fishCompat:'Ideal with Tilapia and Catla. Grows aggressively and handles high ammonia loads from dense fish stocking.',
+    desc:'Native to South Asia and perfectly suited to the hot Tamil Nadu climate. Water spinach is one of the highest-yielding leafy crops in aquaponics systems, producing multiple harvests from a single planting. Very fast growth rate and excellent market demand in South Indian households.',
+    tips:'Cuttings root easily in water. Aggressive grower — trim regularly to prevent overcrowding.',
+    profitNote:'₹30–45/kg · ultra fast cycles · very low input cost'
+  },
+  {
+    id:'amaranth', name:'Arai Keerai (Amaranth)', local:'அரைக்கீரை', latin:'Amaranthus tricolor', cat:'leafy',
+    img:'/static/plants/amaranth.png',
+    ph:'6.0 – 7.5', temp:'25 – 35°C', harvest:'25 – 35 days', light:'Full sun',
+    growth:92, survival:94, profit:72,
+    yield:'3 – 5 kg/m²/cycle', spacing:'15 cm', system:'Media bed / NFT',
+    fishCompat:'Works excellently with all South Indian carps. High heat tolerance aligns with warm tropical fish tank temperatures.',
+    desc:'Arai Keerai is a staple leafy green across Tamil Nadu and Andhra Pradesh. In aquaponics, it thrives in warm tropical conditions and is extremely tolerant of humidity and partial waterlogging. Rich in iron and protein, making it a premium-value crop.',
+    tips:'Harvest at 20–25 cm height. Successive plantings recommended for continuous supply.',
+    profitNote:'₹25–40/kg · beloved local crop · year-round demand'
+  },
+  {
+    id:'murungai', name:'Drumstick / Moringa', local:'முருங்கை', latin:'Moringa oleifera', cat:'leafy',
+    img:'/static/plants/moringa.png',
+    ph:'6.5 – 7.5', temp:'25 – 35°C', harvest:'60 – 90 days (pods)', light:'Full sun',
+    growth:80, survival:88, profit:90,
+    yield:'8–14 kg pods/tree/year', spacing:'2 m', system:'Media bed / soil-base',
+    fishCompat:'Moderate fish nutrient uptake. Good for large media bed systems alongside Rohu and Catla which produce high waste.',
+    desc:'Moringa is a nutritional powerhouse and one of South India\'s most economically important crops. In aquaponics, it can be grown in deep media beds where long root systems develop. Drumsticks, leaves, and seeds all carry premium market value in Indian markets.',
+    tips:'Start from cuttings. Prune regularly to manage height in greenhouse setups.',
+    profitNote:'₹80–120/kg pods · leaves ₹200–400/kg dried · very high value'
+  },
+  {
+    id:'tomato', name:'Thakkali (Tomato)', local:'தக்காளி', latin:'Solanum lycopersicum', cat:'fruiting',
+    img:'/static/plants/tomato.png',
+    ph:'5.8 – 6.8', temp:'20 – 30°C', harvest:'60 – 80 days', light:'Full sun (8+ hrs)',
+    growth:82, survival:85, profit:88,
+    yield:'5 – 8 kg/plant/season', spacing:'40 cm', system:'Media bed / drip',
+    fishCompat:'Best with high-stocking Tilapia or Pangasius systems. Demands rich nitrate levels only mature systems can provide.',
+    desc:'Tomatoes are one of the most commercially viable fruiting crops in aquaponics. They require a well-established nitrogen cycle and are best suited for media bed systems. South Indian varieties like PKM-1 and CO-3 perform well in warm tropical conditions.',
+    tips:'Provide vertical trellis support. Maintain consistent pH. Supplement potassium if fruiting is slow.',
+    profitNote:'₹20–60/kg seasonal · consistent demand · high overall yield value'
+  },
+  {
+    id:'brinjal', name:'Kathirikkai (Brinjal)', local:'கத்திரிக்காய்', latin:'Solanum melongena', cat:'fruiting',
+    img:'/static/plants/brinjal.png',
+    ph:'6.0 – 7.0', temp:'22 – 32°C', harvest:'55 – 75 days', light:'Full sun',
+    growth:79, survival:83, profit:82,
+    yield:'4 – 7 kg/plant/season', spacing:'50 cm', system:'Media bed',
+    fishCompat:'Compatible with Rohu and Mrigal. Requires stable pH and moderate nitrogen — well-balanced systems ideal.',
+    desc:'Brinjal is one of the most consumed vegetables in South India. In aquaponics, it performs well in deep media beds. The MTH-1 and CO-2 varieties developed by TNAU are particularly suitable for warm humid Tamil Nadu conditions.',
+    tips:'Pinch growing tips early to encourage bushy growth. Watch for aphids in humid conditions.',
+    profitNote:'₹15–40/kg · staple vegetable · year-round harvest potential'
+  },
+  {
+    id:'ladyfinger', name:'Vendakkai (Okra/Lady\'s Finger)', local:'வெண்டைக்காய்', latin:'Abelmoschus esculentus', cat:'fruiting',
+    img:'/static/plants/okra.png',
+    ph:'6.0 – 7.0', temp:'24 – 35°C', harvest:'45 – 60 days', light:'Full sun',
+    growth:85, survival:87, profit:80,
+    yield:'3 – 5 kg/plant/season', spacing:'45 cm', system:'Media bed',
+    fishCompat:'Excellent with Tilapia and Silver Carp — tolerates warm water temps from tropical fish culture.',
+    desc:'Vendakkai is a heat-loving crop that thrives in the Tamil Nadu climate. It is one of the few fruiting vegetables that tolerates slightly higher temperatures and does not require chilling. In aquaponics media beds, it establishes quickly and begins fruiting in under two months.',
+    tips:'Harvest pods every 3–4 days to encourage continuous production. Direct sow seeds for best results.',
+    profitNote:'₹20–50/kg · multiple harvests weekly once established'
+  },
+  {
+    id:'bittergourd', name:'Paavakkai (Bitter Gourd)', local:'பாவக்காய்', latin:'Momordica charantia', cat:'fruiting',
+    img:'/static/plants/bittergourd.png',
+    ph:'5.5 – 6.8', temp:'24 – 35°C', harvest:'55 – 70 days', light:'Full sun',
+    growth:76, survival:80, profit:84,
+    yield:'5 – 10 kg/plant/season', spacing:'1 m', system:'Media bed / trellis system',
+    fishCompat:'Good with Singhi and Climbing Perch — these hardy fish thrive in high-ammonia environments, producing the nutrient load bittergourd vines need.',
+    desc:'Paavakkai is deeply ingrained in South Indian cuisine and medicine. As a climber, it needs a trellis system in aquaponics grow beds. It is highly adaptable to warm humid conditions and produces generously once established.',
+    tips:'Train vines on vertical support. Remove male flowers early to focus energy on fruit set.',
+    profitNote:'₹25–60/kg · medicinal value adds premium · strong local demand'
+  },
+  {
+    id:'ridgegourd', name:'Peerkangai (Ridge Gourd)', local:'பீர்க்கங்காய்', latin:'Luffa acutangula', cat:'fruiting',
+    img:'/static/plants/ridgegourd.png',
+    ph:'6.0 – 7.0', temp:'25 – 35°C', harvest:'50 – 65 days', light:'Full sun',
+    growth:80, survival:84, profit:76,
+    yield:'6 – 12 kg/plant/season', spacing:'1 m', system:'Media bed / trellis',
+    fishCompat:'Compatible with all South Indian carps in moderate-density systems.',
+    desc:'Ridge gourd is a classic Tamil household vegetable ideal for large grow beds in aquaponics. The fast-growing vines produce abundantly and are low-maintenance once established. Both the tender fruit and the fibrous mature gourd (used as luffa) carry commercial value.',
+    tips:'Needs strong trellis. Harvest young (15–20 cm) for best flavour and continued production.',
+    profitNote:'₹15–35/kg fruit · mature luffa also sellable · dual income'
+  },
+  {
+    id:'snakegourd', name:'Pudalangkai (Snake Gourd)', local:'புடலங்காய்', latin:'Trichosanthes cucumerina', cat:'fruiting',
+    img:'/static/plants/snakegourd.png',
+    ph:'6.0 – 7.0', temp:'25 – 38°C', harvest:'50 – 60 days', light:'Full sun',
+    growth:78, survival:82, profit:74,
+    yield:'6 – 10 kg/plant/season', spacing:'1 m', system:'Media bed / overhead trellis',
+    fishCompat:'Pairs well with Grass Carp and Common Carp systems.',
+    desc:'Snake gourd is a highly heat-tolerant crop native to South and Southeast Asia. It thrives in Tamil Nadu summer conditions and produces large fruit on vigorous climbing vines. In aquaponics systems it can be trained overhead to maximise vertical space.',
+    tips:'Tie a small stone to the tip of young fruits to encourage elongation. Harvest at 45–60 cm length.',
+    profitNote:'₹15–30/kg · lightweight to transport · strong local demand'
+  },
+  {
+    id:'ashgourd', name:'Poosanikai (Ash Gourd)', local:'பூசணிக்காய்', latin:'Benincasa hispida', cat:'fruiting',
+    img:'/static/plants/ashgourd.png',
+    ph:'6.0 – 7.0', temp:'25 – 35°C', harvest:'90 – 120 days', light:'Full sun',
+    growth:68, survival:78, profit:78,
+    yield:'10 – 20 kg/plant/season', spacing:'1.5 m', system:'Deep media bed',
+    fishCompat:'Compatible with high-stocking carp systems producing heavy organic load.',
+    desc:'Ash gourd is valued medicinally and culinarily across South India. As a long-season crop, it occupies large media beds for 3–4 months but produces enormous fruits with high market value. The dense root system is highly efficient at pulling nitrates from aquaponics water.',
+    tips:'Requires very deep grow media (min. 30 cm). Fruit can weigh 5–15 kg each. Limited to 2 cycles/year.',
+    profitNote:'₹15–40/kg · juice commands ₹100–200/L · high value per plant'
+  },
+  {
+    id:'mint', name:'Pudina (Mint)', local:'புதினா', latin:'Mentha spicata', cat:'herb',
+    img:'/static/plants/mint.png',
+    ph:'6.0 – 7.0', temp:'18 – 28°C', harvest:'30 – 40 days', light:'Partial shade',
+    growth:90, survival:93, profit:85,
+    yield:'2 – 4 kg/m²/cycle', spacing:'20 cm', system:'NFT / DWC / Media bed',
+    fishCompat:'Excellent with Tilapia and Common Carp. Mint is highly adaptable and thrives in the warm water temperatures these fish prefer.',
+    desc:'Pudina is one of the most profitable herbs to grow in an aquaponics system due to its speed, ease of harvest, and premium retail pricing. It can be harvested continuously by cutting the top 1/3 of stems. High demand from restaurants, juice shops, and households in South India.',
+    tips:'Grows best in partial shade during South Indian summers. Propagate via stem cuttings in water.',
+    profitNote:'₹100–200/kg · restaurant demand is consistent · very low maintenance'
+  },
+  {
+    id:'coriander', name:'Kothamalli (Coriander)', local:'கொத்தமல்லி', latin:'Coriandrum sativum', cat:'herb',
+    img:'/static/plants/coriander.png',
+    ph:'6.0 – 7.5', temp:'17 – 27°C', harvest:'25 – 40 days', light:'Partial sun',
+    growth:82, survival:85, profit:80,
+    yield:'1.5 – 3 kg/m²/cycle', spacing:'10 cm', system:'NFT / DWC',
+    fishCompat:'Ideal with Rohu and Mrigal in systems with moderate nutrient load.',
+    desc:'Coriander is the most universally purchased herb in every South Indian kitchen. In aquaponics, successive plantings ensure a steady continuous supply. It prefers cooler temperatures so is best grown during October–February in South India or with shade netting.',
+    tips:'Sow densely and cut whole bunches at the base for market. Bolts quickly in heat — replant every 3 weeks.',
+    profitNote:'₹60–120/bunch retail · mass daily demand · 8–10 cycles/year'
+  },
+  {
+    id:'curry_leaf', name:'Karuvepilai (Curry Leaf)', local:'கறிவேப்பிலை', latin:'Murraya koenigii', cat:'herb',
+    img:'/static/plants/curryleaf.png',
+    ph:'6.0 – 7.0', temp:'26 – 38°C', harvest:'90+ days (perennial)', light:'Full sun',
+    growth:72, survival:88, profit:92,
+    yield:'Perennial · harvest sprigs every 6 wks', spacing:'60 cm', system:'Deep media bed',
+    fishCompat:'Works in high-temp Tilapia systems. Slow to establish but once mature, requires minimal care.',
+    desc:'Curry leaves are an indispensable part of South Indian cooking used every single day in millions of households and restaurants. In aquaponics deep media beds, curry leaf plants establish slowly but become perennial producers with minimal nutrient input. The extremely high market price makes this one of the highest ROI crops per square metre.',
+    tips:'Start from established seedlings rather than seeds. Takes 6 months to first harvest but then produces indefinitely.',
+    profitNote:'₹300–600/kg dried · ₹80–150/kg fresh · perennial = perpetual income'
+  },
+  {
+    id:'fenugreek', name:'Vendhayam (Fenugreek)', local:'வெந்தயக்கீரை', latin:'Trigonella foenum-graecum', cat:'herb',
+    img:'/static/plants/fenugreek.png',
+    ph:'6.0 – 7.0', temp:'18 – 28°C', harvest:'20 – 30 days (leaves)', light:'Full sun',
+    growth:88, survival:90, profit:72,
+    yield:'1.5 – 2.5 kg/m²/cycle', spacing:'10 cm', system:'NFT / Media bed',
+    fishCompat:'Compatible with all Indian carps. Low nutrient demand suits young or lightly stocked systems.',
+    desc:'Fenugreek leaves and seeds are a staple in Tamil Nadu and South Indian cooking. As a microgreen or full-leaf harvest, it grows extraordinarily fast in aquaponics and is ready for market in under a month. The leaves are especially high in iron and are premium-priced at organic stores.',
+    tips:'Dense sowing recommended. Harvest the entire plant or cut 3 cm above base for regrowth.',
+    profitNote:'₹60–100/kg leaves · seeds ₹80–120/kg · dual income crop'
+  },
+  {
+    id:'radish', name:'Mullangi (Radish)', local:'முள்ளங்கி', latin:'Raphanus sativus', cat:'root',
+    img:'/static/plants/radish.png',
+    ph:'6.0 – 7.0', temp:'18 – 28°C', harvest:'25 – 40 days', light:'Full sun / partial',
+    growth:84, survival:86, profit:68,
+    yield:'2 – 4 kg/m²/cycle', spacing:'10 cm', system:'Deep media bed (15+ cm)',
+    fishCompat:'Pairs well with Singhi and Freshwater Prawn systems producing moderate nutrient loads.',
+    desc:'Radish is one of the few root vegetables that adapts reasonably well to aquaponics media beds, provided the medium is deep and loose enough for the root to develop. White Icicle and Pusa Chetki varieties perform particularly well in South Indian conditions.',
+    tips:'Sow seeds directly. Ensure media is loose and at least 15 cm deep. Harvest promptly when ready or they turn pithy.',
+    profitNote:'₹20–40/kg · fast cycle · good as a "gap filler" between longer crops'
+  },
+  {
+    id:'beetroot', name:'Beetroot', local:'பீட்ரூட்', latin:'Beta vulgaris', cat:'root',
+    img:'/static/plants/beetroot.png',
+    ph:'6.0 – 7.5', temp:'16 – 24°C', harvest:'55 – 70 days', light:'Full sun',
+    growth:72, survival:76, profit:74,
+    yield:'2 – 4 kg/m²/cycle', spacing:'15 cm', system:'Deep media bed (20+ cm)',
+    fishCompat:'Works in mature systems with Rohu and Catla producing high organic waste.',
+    desc:'Beetroot can be grown in deep aquaponics media beds, producing both the nutritious root and edible greens. A slow-to-moderate crop compared to leafy greens, it compensates with higher market value and growing urban demand for fresh beetroot at vegetable markets and restaurants.',
+    tips:'Requires deeper media than most crops. The greens can be harvested before the root matures.',
+    profitNote:'₹30–60/kg · increasing health-food demand · dual root + leaf income'
+  },
+  {
+    id:'capsicum', name:'Kudai Milagai (Capsicum)', local:'குடைமிளகாய்', latin:'Capsicum annuum', cat:'fruiting',
+    img:'/static/plants/capsicum.png',
+    ph:'6.0 – 6.8', temp:'21 – 29°C', harvest:'70 – 90 days', light:'Full sun',
+    growth:74, survival:79, profit:86,
+    yield:'4 – 6 kg/plant/season', spacing:'40 cm', system:'Media bed / NFT',
+    fishCompat:'Best in established systems with Tilapia. Requires stable pH and consistent nutrient levels.',
+    desc:'Capsicum is one of the highest-value fruiting vegetables in the South Indian market. Both green and coloured varieties (red, yellow) command premium prices. In aquaponics, it requires a well-established nitrogen cycle and benefits from supplemental potassium during fruiting.',
+    tips:'Green capsicum can be harvested at 60 days; coloured at 80–90. Pinch early side shoots.',
+    profitNote:'₹30–80/kg green · ₹80–180/kg coloured · export quality possible'
+  },
+  {
+    id:'chilli', name:'Milagai (Green Chilli)', local:'மிளகாய்', latin:'Capsicum frutescens', cat:'fruiting',
+    img:'/static/plants/chilli.png',
+    ph:'5.8 – 6.8', temp:'25 – 35°C', harvest:'60 – 75 days', light:'Full sun',
+    growth:83, survival:86, profit:82,
+    yield:'3 – 6 kg/plant/season', spacing:'40 cm', system:'Media bed',
+    fishCompat:'Good with Tilapia and Pangasius. Heat tolerance matches the preferred temperature of tropical fish species.',
+    desc:'Green chilli is arguably the single most used ingredient in South Indian cooking. In aquaponics, chilli plants produce prolifically over many months once established. The K-1 and PKM-1 varieties from TNAU produce abundantly in Tamil Nadu conditions.',
+    tips:'Start from nursery transplants. Pinch first 2–3 flower buds to encourage bushy growth before fruiting.',
+    profitNote:'₹30–80/kg · daily market demand · 6+ months continuous harvest'
+  },
+{
+    id:'manathakkali',name:'Manathakkali Keerai',local:'மணத்தக்காளிக்கீரை',latin:'Solanum nigrum',cat:'leafy',
+    img:'/static/plants/manathakkali.png',
+    ph:'6.0 – 7.0',temp:'22 – 32°C',harvest:'25 – 35 days (leaves), 45 days (berries)',light:'Full sun to partial shade',
+    growth:83,survival:86,profit:82,
+    yield:'1 – 1.5 kg/m²/cycle',spacing:'30 – 45 cm',system:'Media bed / DWC',
+    fishCompat:'Performs well in Tilapia and Carp systems with moderate to high nutrient levels.',
+    desc:'Manathakkali Keerai is a traditional medicinal plant widely used in South Indian cooking and Ayurveda. Both leaves and berries are edible and valued for treating ulcers and improving digestion. In aquaponics, it grows easily and adapts well to nutrient-rich water.',
+    tips:'Harvest leaves regularly to promote new growth. Ensure proper sunlight for berry production.',
+    profitNote:'₹40–100/kg · good demand in herbal markets and local households'
+},
+  {
+    id:'agathi', name:'Agathi Keerai (Hummingbird Tree)', local:'அகத்திக்கீரை', latin:'Sesbania grandiflora', cat:'leafy',
+    img:'/static/plants/agathi.png',
+    ph:'6.0 – 7.5', temp:'25 – 38°C', harvest:'60 days (first) · perennial', light:'Full sun',
+    growth:78, survival:85, profit:76,
+    yield:'Perennial leaf production', spacing:'1.5 m', system:'Deep media bed',
+    fishCompat:'Compatible with Mrigal and Common Carp systems with moderate stocking density.',
+    desc:'Agathi Keerai is a traditional South Indian leafy vegetable rich in calcium, iron, and vitamins. The tree grows rapidly in tropical conditions and once established in a deep aquaponics bed provides continuous leaf harvests. Flowers are also edible and carry additional market value in specialty restaurants.',
+    tips:'Fast-growing tree — manage height by cutting every 8–10 weeks. Roots fix nitrogen (bonus for system).',
+    profitNote:'₹30–60/kg leaves · flowers ₹80–150/kg · traditional medicine market'
+  },
+  {
+    id:'taro', name:'Seppankizhangu (Taro / Arbi)', local:'சேப்பங்கிழங்கு', latin:'Colocasia esculenta', cat:'root',
+    img:'/static/plants/taro.png',
+    ph:'5.5 – 7.0', temp:'25 – 35°C', harvest:'180 – 240 days', light:'Partial shade',
+    growth:62, survival:80, profit:80,
+    yield:'3 – 7 kg/m²', spacing:'30 cm', system:'Flood-and-drain / media bed',
+    fishCompat:'Semi-aquatic — perfect companion for systems with Freshwater Prawn and Climbing Perch that tolerate fluctuating water levels.',
+    desc:'Taro is a semi-aquatic root vegetable that bridges the gap between land and water cultivation, making it uniquely suited to aquaponics flood-and-drain systems. Seppankizhangu is deeply embedded in Tamil cuisine and commands strong market prices at all times of year.',
+    tips:'Requires long growing period. Plant corms in deep media. Leaves are also edible as Patrode in regional cooking.',
+    profitNote:'₹40–80/kg · year-round demand · leaves also saleable'
+  },
+  {
+    id:'ginger', name:'Inji (Ginger)', local:'இஞ்சி', latin:'Zingiber officinale', cat:'root',
+    img:'/static/plants/ginger.png',
+    ph:'6.0 – 7.0', temp:'22 – 30°C', harvest:'150 – 180 days', light:'Partial shade',
+    growth:64, survival:78, profit:90,
+    yield:'1.5 – 3 kg/m²', spacing:'20 cm', system:'Deep media bed (25+ cm)',
+    fishCompat:'Compatible with Rohu and Mrigal in low-to-medium stocking density systems. Prefers slightly cooler water.',
+    desc:'Ginger is one of Tamil Nadu\'s highest-value spice crops. In aquaponics, it can be cultivated in very deep media beds with shade. Though it takes 5–6 months, the return per square metre is exceptional. Both fresh ginger and dried ginger (dry ginger / chukku) carry premium prices.',
+    tips:'Use healthy rhizome pieces as planting material. Shading is essential in summer months.',
+    profitNote:'₹60–120/kg fresh · dried ginger ₹300–600/kg · extremely high ROI'
+  },
+  {
+    id:'turmeric', name:'Manjal (Turmeric)', local:'மஞ்சள்', latin:'Curcuma longa', cat:'root',
+    img:'/static/plants/turmeric.png',
+    ph:'5.5 – 7.0', temp:'20 – 30°C', harvest:'210 – 270 days', light:'Partial shade',
+    growth:58, survival:75, profit:92,
+    yield:'2 – 3 kg/m²', spacing:'25 cm', system:'Very deep media bed (30+ cm)',
+    fishCompat:'Best in low-density carp systems. Long crop duration requires a stable, well-established ecosystem.',
+    desc:'Turmeric is South India\'s most sacred and economically valuable spice. Though it requires a long growing season (7–9 months) and deep grow beds in aquaponics, the premium market prices for organic turmeric make the economics extremely compelling. Tamil Nadu is India\'s second largest turmeric producer.',
+    tips:'Plant small rhizomes with 2–3 buds each. Needs partial shade and consistent moisture — aquaponics provides both.',
+    profitNote:'₹80–150/kg fresh · ₹200–450/kg dry · organic premium commands 2–3× price'
+  },
+  {
+    id:'watermelon', name:'Tarbhooja (Small Watermelon)', local:'தர்பூசணி', latin:'Citrullus lanatus', cat:'fruiting',
+    img:'/static/plants/watermelon.png',
+    ph:'5.8 – 6.8', temp:'25 – 35°C', harvest:'70 – 90 days', light:'Full sun (10+ hrs)',
+    growth:70, survival:74, profit:84,
+    yield:'3 – 6 kg/plant', spacing:'1 m', system:'Large media bed / overhead trellis',
+    fishCompat:'Suitable for high-stocking Tilapia systems that generate high nitrogen output during warm months.',
+    desc:'Mini and icebox watermelon varieties can be grown in large aquaponics media beds or suspended on strong overhead trellises in South India. The combination of high heat, abundant sunlight, and consistent aquaponics nutrient delivery creates conditions for very productive fruiting.',
+    tips:'Use mini varieties like Sugar Baby or local TN selections. Support each fruit in a mesh sling on the trellis.',
+    profitNote:'₹20–50/kg · seasonal premium in Apr–Jun · high fruit weight = high total value'
+  }
+];
+
+/* ═══════════════════════════════════════════════════
+   CAT COLORS
+═══════════════════════════════════════════════════ */
+const catColors = {
+  leafy:   { border:'rgba(108,224,0,0.35)',  badge:'rgba(108,224,0,0.12)',  text:'#6ce000',  label:'Leafy' },
+  fruiting:{ border:'rgba(245,158,11,0.35)', badge:'rgba(245,158,11,0.12)', text:'#f59e0b',  label:'Fruiting' },
+  root:    { border:'rgba(255,100,100,0.35)',badge:'rgba(255,100,100,0.12)',text:'#ff8080',  label:'Root' },
+  herb:    { border:'rgba(0,218,243,0.35)',   badge:'rgba(0,218,243,0.12)',   text:'#00daf3',  label:'Herb' },
+};
+
+/* ═══════════════════════════════════════════════════
+   RENDER CARDS
+═══════════════════════════════════════════════════ */
+function renderPlants(filter) {
+  const grid = document.getElementById('plantGrid');
+  grid.innerHTML = '';
+  const list = filter === 'all' ? plants : plants.filter(p => p.cat === filter);
+  list.forEach(p => {
+    const c = catColors[p.cat];
+    const card = document.createElement('div');
+    card.className = 'plant-card scroll-section visible';
+    card.style.borderColor = c.border;
+    card.onclick = () => openPlantDetail(p.id);
+    card.innerHTML = `
+      <div class="plant-img-zone">
+        <span class="cat-badge badge" style="background:${c.badge};color:${c.text};border:1px solid ${c.border};">${c.label}</span>
+        <img src="${p.img}" alt="${p.name}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+        <div style="display:none;width:64px;height:64px;border-radius:50%;background:rgba(108,224,0,0.07);border:1px solid rgba(108,224,0,0.2);align-items:center;justify-content:center;">
+          <span style="font-size:10px;color:#3a5a3a;font-family:'JetBrains Mono',monospace;text-align:center;padding:4px;">${p.name.split('(')[0].trim().substring(0,6)}</span>
+        </div>
+      </div>
+      <div style="padding:14px;">
+        <p style="font-size:13px;font-weight:800;margin:0 0 1px;line-height:1.3;">${p.name}</p>
+        <p style="font-size:9px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;margin:0 0 10px;">${p.local} · ${p.latin}</p>
+        <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:10px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-size:9px;color:#5a6a7a;">Growth</span>
+            <span style="font-size:9px;font-weight:700;color:${p.growth>=85?'#6ce000':p.growth>=70?'#f59e0b':'#ff8080'};">${p.growth}%</span>
+          </div>
+          <div class="prog-bar"><div class="prog-fill" style="width:${p.growth}%;background:${p.growth>=85?'#6ce000':p.growth>=70?'#f59e0b':'#ff8080'};"></div></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:9px;color:#5a6a7a;margin-bottom:8px;">
+          <span>pH <span style="color:#00daf3;">${p.ph}</span></span>
+          <span>${p.harvest}</span>
+        </div>
+        <div style="width:100%;padding:6px 0;border-radius:8px;border:1px solid rgba(108,224,0,0.2);background:rgba(108,224,0,0.04);color:#6ce000;font-size:9px;font-family:'JetBrains Mono',monospace;text-align:center;letter-spacing:0.05em;margin-top:2px;">
+          VIEW PROFILE →
+        </div>
+      </div>`;
+    grid.appendChild(card);
+  });
+}
+
+/* ═══════════════════════════════════════════════════
+   DETAIL OVERLAY
+═══════════════════════════════════════════════════ */
+function openPlantDetail(id) {
+  const p = plants.find(x => x.id === id);
+  if (!p) return;
+  const c = catColors[p.cat];
+  const riskColor = p.profit >= 85 ? '#6ce000' : p.profit >= 70 ? '#f59e0b' : '#ff8080';
+
+  document.getElementById('plantDetailContent').innerHTML = `
+    <div style="display:flex;align-items:flex-start;gap:18px;margin-bottom:24px;">
+      <div style="width:90px;height:90px;border-radius:16px;background:#0d1a0d;border:1px solid ${c.border};display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;">
+        <img src="${p.img}" alt="${p.name}" style="width:72px;height:72px;object-fit:contain;" onerror="this.style.display='none';" />
+      </div>
+      <div style="flex:1;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+          <h2 style="font-size:20px;font-weight:800;margin:0;">${p.name}</h2>
+          <span class="badge" style="background:${c.badge};color:${c.text};border:1px solid ${c.border};">${c.label}</span>
+        </div>
+        <p style="font-size:11px;color:#5a6a7a;font-style:italic;margin:0 0 4px;">${p.latin}</p>
+        <p style="font-size:12px;color:#00daf3;font-family:'JetBrains Mono',monospace;">${p.local}</p>
+      </div>
+    </div>
+
+    <p style="font-size:13px;color:#8a9aaa;line-height:1.8;margin-bottom:18px;">${p.desc}</p>
+
+    <!-- Performance meters -->
+    <div class="detail-sec">
+      <p style="font-size:9px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;letter-spacing:0.1em;margin-bottom:12px;">PERFORMANCE METRICS</p>
+      ${[
+        { label:'Growth Rate', val:p.growth, color: p.growth>=85?'#6ce000':p.growth>=70?'#f59e0b':'#ff8080' },
+        { label:'Survival Rate', val:p.survival, color: p.survival>=90?'#6ce000':p.survival>=75?'#f59e0b':'#ff8080' },
+        { label:'Profit Ratio', val:p.profit, color: p.profit>=85?'#6ce000':p.profit>=70?'#f59e0b':'#ff8080' }
+      ].map(m=>`
+        <div style="margin-bottom:10px;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+            <span style="font-size:11px;color:#5a6a7a;">${m.label}</span>
+            <span style="font-size:12px;font-weight:800;color:${m.color};">${m.val}%</span>
+          </div>
+          <div class="prog-bar"><div class="prog-fill" style="width:${m.val}%;background:${m.color};"></div></div>
+        </div>`).join('')}
+    </div>
+
+    <!-- Growing conditions -->
+    <div class="detail-sec">
+      <p style="font-size:9px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;letter-spacing:0.1em;margin-bottom:4px;">GROWING CONDITIONS</p>
+      ${[
+        ['pH Range', p.ph, '#00daf3'],
+        ['Temperature', p.temp, '#f59e0b'],
+        ['Harvest Time', p.harvest, '#6ce000'],
+        ['Expected Yield', p.yield, '#dde3ec'],
+        ['Plant Spacing', p.spacing, '#dde3ec'],
+        ['Light Requirement', p.light, '#dde3ec'],
+        ['Suitable System', p.system, '#00daf3'],
+      ].map(([k,v,col])=>`
+        <div class="detail-row">
+          <span style="font-size:12px;color:#5a6a7a;">${k}</span>
+          <span style="font-size:12px;font-weight:700;color:${col};text-align:right;max-width:260px;">${v}</span>
+        </div>`).join('')}
+    </div>
+
+    <!-- Fish compatibility -->
+    <div class="detail-sec" style="border-color:rgba(0,218,243,0.15);">
+      <p style="font-size:9px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;letter-spacing:0.1em;margin-bottom:6px;">FISH COMPATIBILITY</p>
+      <p style="font-size:12px;color:#dde3ec;line-height:1.7;">${p.fishCompat}</p>
+    </div>
+
+    <!-- Tips + Profit -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div class="detail-sec" style="margin-bottom:0;border-color:rgba(108,224,0,0.15);">
+        <p style="font-size:9px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;letter-spacing:0.08em;margin-bottom:6px;">GROWER TIPS</p>
+        <p style="font-size:11px;color:#8a9aaa;line-height:1.7;">${p.tips}</p>
+      </div>
+      <div class="detail-sec" style="margin-bottom:0;border-color:rgba(245,158,11,0.15);">
+        <p style="font-size:9px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;letter-spacing:0.08em;margin-bottom:6px;">MARKET VALUE</p>
+        <p style="font-size:11px;color:#f59e0b;line-height:1.7;">${p.profitNote}</p>
+      </div>
+    </div>`;
+
+  document.getElementById('plantOverlay').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function closePlantOverlay(e) {
+  if (!e || e.target === document.getElementById('plantOverlay') || e.target.tagName === 'BUTTON') {
+    document.getElementById('plantOverlay').style.display = 'none';
+  }
+}
+
+document.addEventListener('keydown', e => { if(e.key==='Escape') closePlantOverlay({}); });
+
+/* ═══════════════════════════════════════════════════
+   FILTER BUTTONS
+═══════════════════════════════════════════════════ */
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderPlants(btn.dataset.filter);
+  });
+});
+
+// Initial render
+renderPlants('all');
+</script>
+</body>
+</html>

@@ -1,0 +1,1365 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fish Inventory | The Living Lab</title>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;400;500;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: { extend: {
+        colors: { primary: "#00daf3", surface: "#0a0f14" },
+        fontFamily: { headline: ["Manrope"], mono: ["JetBrains Mono"] }
+      }}
+    };
+  </script>
+  <style>
+    * { box-sizing: border-box; }
+    body { background: #0a0f14; color: #dde3ec; font-family: 'Manrope', sans-serif; margin: 0; overflow: hidden; }
+    body::before { content:''; position:fixed;inset:0;background-image:linear-gradient(rgba(0,218,243,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,218,243,0.03) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0; }
+
+    .sidebar { width:220px;background:#0d1319;border-right:1px solid #1e2830; }
+    .nav-item { display:flex;align-items:center;gap:10px;padding:12px 20px;color:#5a6a7a;font-size:13px;font-weight:500;cursor:pointer;transition:all 0.2s;border-left:2px solid transparent;text-decoration:none; }
+    .nav-item:hover { color:#00daf3;background:rgba(0,218,243,0.05); }
+    .nav-item.active { color:#00daf3;border-left-color:#00daf3;background:rgba(0,218,243,0.07); }
+    .nav-icon { font-size:16px;width:20px;text-align:center; }
+    .pulse-dot { width:8px;height:8px;border-radius:50%;background:#6ce000;animation:pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(108,224,0,0.4)} 50%{box-shadow:0 0 0 6px rgba(108,224,0,0)} }
+
+    .stat-card { background:#111820;border:1px solid #1e2830;border-radius:14px;padding:20px;transition:border-color 0.3s,transform 0.2s; }
+    .badge { font-size:10px;padding:2px 8px;border-radius:20px;font-family:'JetBrains Mono',monospace;letter-spacing:0.05em;text-transform:uppercase; }
+    .badge-ok { background:rgba(108,224,0,0.1);color:#6ce000; }
+    .badge-warn { background:rgba(245,158,11,0.1);color:#f59e0b; }
+    .badge-cyan { background:rgba(0,218,243,0.1);color:#00daf3; }
+
+    @keyframes fadeInUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+    .anim-1 { animation:fadeInUp 0.5s ease 0.1s both; }
+
+    /* Fish card */
+    .fish-card {
+      background:#111820;border:1px solid #1e2830;border-radius:20px;overflow:hidden;
+      cursor:pointer;transition:all 0.35s cubic-bezier(0.34,1.56,0.64,1);position:relative;
+      display:flex;flex-direction:column;
+    }
+    .fish-card::before {
+      content:'';position:absolute;inset:0;border-radius:20px;
+      background:linear-gradient(135deg,rgba(0,218,243,0.06),transparent);opacity:0;transition:opacity 0.3s;
+    }
+    .fish-card:hover { border-color:rgba(0,218,243,0.4);transform:translateY(-8px) scale(1.02);box-shadow:0 20px 60px rgba(0,0,0,0.6), 0 0 30px rgba(0,218,243,0.1); }
+    .fish-card:hover::before { opacity:1; }
+    .fish-card:hover .fish-emoji { transform:scale(1.3) rotate(-5deg); }
+    .fish-card:hover .click-hint { opacity:1; transform:translateY(0); }
+    .fish-card-img-zone {
+      height:160px;display:flex;align-items:center;justify-content:center;flex-direction:column;
+      position:relative;flex-shrink:0;
+    }
+    .fish-card-body { padding:20px;display:flex;flex-direction:column;flex:1; }
+
+    .fish-emoji { font-size:56px;display:block;transition:transform 0.4s cubic-bezier(0.34,1.56,0.64,1); }
+    .fish-image { width:110px;height:80px;object-fit:contain;transition:transform 0.4s cubic-bezier(0.34,1.56,0.64,1);display:block;margin:0 auto; }
+    .fish-card:hover .fish-image { transform:scale(1.2) rotate(-5deg); }
+
+    .click-hint { opacity:0;transform:translateY(6px);transition:all 0.3s ease;font-size:10px;color:#00daf3;font-family:'JetBrains Mono',monospace;letter-spacing:0.05em; }
+
+    .spec-pill { display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;font-size:10px;font-family:'JetBrains Mono',monospace;font-weight:500;letter-spacing:0.04em;border:1px solid;margin:3px 2px; }
+    .spec-green { background:rgba(108,224,0,0.08);border-color:rgba(108,224,0,0.25);color:#6ce000; }
+    .spec-cyan { background:rgba(0,218,243,0.08);border-color:rgba(0,218,243,0.25);color:#00daf3; }
+    .spec-amber { background:rgba(245,158,11,0.08);border-color:rgba(245,158,11,0.25);color:#f59e0b; }
+
+    /* Detail overlay */
+    .detail-overlay { position:fixed;inset:0;z-index:100;background:rgba(5,8,12,0.85);backdrop-filter:blur(12px);display:none;align-items:center;justify-content:center;animation:fadeIn 0.3s ease both; }
+    @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+    .detail-overlay.open { display:flex; }
+    .detail-panel { background:#0d1319;border:1px solid #1e2830;border-radius:24px;width:680px;max-height:85vh;overflow-y:auto;padding:32px;position:relative;animation:slideUp 0.35s cubic-bezier(0.34,1.2,0.64,1) both; }
+    @keyframes slideUp { from{opacity:0;transform:translateY(40px)} to{opacity:1;transform:translateY(0)} }
+    .detail-section { background:#111820;border:1px solid #1e2830;border-radius:14px;padding:16px;margin-bottom:12px; }
+    .info-row { display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #1a2028; }
+    .info-row:last-child { border-bottom:none; }
+    ::-webkit-scrollbar { width:4px; } ::-webkit-scrollbar-track { background:transparent; } ::-webkit-scrollbar-thumb { background:#1e2830;border-radius:2px; }
+    .close-btn { position:absolute;top:20px;right:20px;width:32px;height:32px;border-radius:50%;background:#1e2830;border:none;color:#5a6a7a;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s; }
+    .close-btn:hover { background:#2a3540;color:#dde3ec; }
+
+    /* ── ADD FISH BUTTON ── */
+    .add-fish-btn {
+      display:flex;align-items:center;gap:8px;width:calc(100% - 24px);margin:0 12px 12px;
+      padding:11px 16px;border-radius:12px;border:1px dashed rgba(0,218,243,0.35);
+      background:rgba(0,218,243,0.04);color:#00daf3;font-size:12px;font-weight:700;
+      font-family:'JetBrains Mono',monospace;letter-spacing:0.06em;cursor:pointer;
+      transition:all 0.25s;
+    }
+    .add-fish-btn:hover { background:rgba(0,218,243,0.10);border-color:rgba(0,218,243,0.6);box-shadow:0 0 18px rgba(0,218,243,0.12); }
+    .add-fish-btn .plus-icon { width:22px;height:22px;border-radius:6px;background:rgba(0,218,243,0.15);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0; }
+
+    /* ── ADD FISH MODAL ── */
+    .add-modal-overlay { position:fixed;inset:0;z-index:200;background:rgba(5,8,12,0.9);backdrop-filter:blur(16px);display:none;align-items:center;justify-content:center; }
+    .add-modal-overlay.open { display:flex; }
+    .add-modal {
+      background:#0d1319;border:1px solid #1e2830;border-radius:28px;
+      width:760px;max-height:90vh;overflow-y:auto;padding:0;position:relative;
+      animation:slideUp 0.35s cubic-bezier(0.34,1.2,0.64,1) both;
+    }
+    .modal-header {
+      padding:24px 28px 20px;border-bottom:1px solid #1e2830;
+      display:flex;justify-content:space-between;align-items:center;
+      position:sticky;top:0;background:#0d1319;z-index:10;border-radius:28px 28px 0 0;
+    }
+    .modal-body { padding:24px 28px; }
+    .modal-footer { padding:16px 28px 24px;border-top:1px solid #1e2830;display:flex;justify-content:flex-end;gap:10px; }
+
+    .form-label { font-size:10px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:6px;display:block; }
+    .form-input {
+      width:100%;background:#111820;border:1px solid #1e2830;border-radius:10px;
+      padding:10px 14px;color:#dde3ec;font-size:13px;font-family:'Manrope',sans-serif;
+      outline:none;transition:border-color 0.2s;
+    }
+    .form-input:focus { border-color:rgba(0,218,243,0.5);box-shadow:0 0 0 3px rgba(0,218,243,0.07); }
+    .form-input::placeholder { color:#3a4a5a; }
+    select.form-input option { background:#111820; }
+
+    /* Drag-drop zone */
+    .drop-zone {
+      border:2px dashed #1e2830;border-radius:16px;padding:32px;text-align:center;
+      cursor:pointer;transition:all 0.25s;position:relative;background:#0a0f14;
+      min-height:160px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    }
+    .drop-zone.drag-over { border-color:#00daf3;background:rgba(0,218,243,0.05);box-shadow:0 0 30px rgba(0,218,243,0.1); }
+    .drop-zone input[type=file] { position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%; }
+    .drop-preview { width:100px;height:72px;object-fit:contain;border-radius:10px;margin-bottom:8px; }
+
+    /* Disease row */
+    .disease-row { display:grid;grid-template-columns:1fr 100px 1fr auto;gap:8px;margin-bottom:8px;align-items:start; }
+    .disease-row input, .disease-row select { font-size:12px; }
+    .remove-btn { width:32px;height:38px;border-radius:8px;background:#1e2830;border:none;color:#5a6a7a;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;transition:all 0.2s;flex-shrink:0; }
+    .remove-btn:hover { background:#2d1a1a;color:#ff6464; }
+    .add-row-btn { display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:8px;border:1px dashed #1e2830;background:transparent;color:#5a6a7a;font-size:11px;font-family:'JetBrains Mono',monospace;cursor:pointer;transition:all 0.2s; }
+    .add-row-btn:hover { border-color:rgba(0,218,243,0.4);color:#00daf3; }
+
+    /* Tag input */
+    .tag-input-wrap { display:flex;flex-wrap:wrap;gap:6px;background:#111820;border:1px solid #1e2830;border-radius:10px;padding:8px;min-height:44px;cursor:text;transition:border-color 0.2s; }
+    .tag-input-wrap:focus-within { border-color:rgba(0,218,243,0.5);box-shadow:0 0 0 3px rgba(0,218,243,0.07); }
+    .tag-chip { display:inline-flex;align-items:center;gap:4px;background:#1e2830;border-radius:6px;padding:3px 8px;font-size:11px;color:#dde3ec; }
+    .tag-chip button { background:none;border:none;color:#5a6a7a;cursor:pointer;font-size:13px;padding:0;line-height:1;transition:color 0.2s; }
+    .tag-chip button:hover { color:#ff6464; }
+    .tag-chip-input { flex:1;min-width:120px;background:none;border:none;outline:none;color:#dde3ec;font-size:12px;font-family:'Manrope',sans-serif; }
+    .tag-chip-input::placeholder { color:#3a4a5a; }
+
+    /* Save btn */
+    .save-btn { padding:11px 24px;border-radius:12px;background:linear-gradient(135deg,#00daf3,#0077ff);border:none;color:#0a0f14;font-size:13px;font-weight:800;font-family:'Manrope',sans-serif;cursor:pointer;transition:all 0.25s;letter-spacing:0.02em; }
+    .save-btn:hover { transform:translateY(-1px);box-shadow:0 8px 24px rgba(0,218,243,0.35); }
+    .cancel-btn { padding:11px 20px;border-radius:12px;background:#1e2830;border:none;color:#5a6a7a;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s; }
+    .cancel-btn:hover { background:#2a3540;color:#dde3ec; }
+
+    .section-divider { font-size:9px;color:#3a4a5a;font-family:'JetBrains Mono',monospace;letter-spacing:0.12em;text-transform:uppercase;margin:20px 0 14px;padding-bottom:8px;border-bottom:1px solid #1a2028; }
+    .grid-2 { display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px; }
+    .grid-3 { display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px; }
+
+    /* ── TEMP TEST ── */
+    .temp-test-btn {
+      width:100%;padding:12px 0;border-radius:12px;border:1px solid rgba(0,218,243,0.25);
+      background:rgba(0,218,243,0.06);color:#00daf3;font-weight:700;font-size:13px;
+      cursor:pointer;transition:all 0.2s;font-family:'Manrope',sans-serif;margin-top:14px;
+      display:flex;align-items:center;justify-content:center;gap:8px;
+    }
+    .temp-test-btn:hover { background:rgba(0,218,243,0.13);border-color:rgba(0,218,243,0.5);box-shadow:0 0 18px rgba(0,218,243,0.18); }
+    .temp-test-btn:disabled { opacity:0.6;cursor:not-allowed; }
+    .temp-result-box { display:none;align-items:flex-start;gap:10px;border-radius:12px;padding:12px 14px;margin-top:10px; }
+    .temp-ok-box  { background:rgba(108,224,0,0.06);border:1px solid rgba(108,224,0,0.25); }
+    .temp-bad-box { background:rgba(255,100,100,0.06);border:1px solid rgba(255,100,100,0.25); }
+    @keyframes popIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+    .pop-in { animation:popIn 0.3s ease both; }
+
+    /* ── CARD SENSOR BUTTON ── */
+    .card-sensor-btn {
+      width:100%;padding:9px 0;border-radius:10px;
+      border:1px solid rgba(0,218,243,0.25);
+      background:linear-gradient(135deg,rgba(0,218,243,0.06),rgba(108,224,0,0.04));
+      color:#00daf3;font-weight:700;font-size:11px;cursor:pointer;
+      font-family:'Manrope',sans-serif;
+      display:flex;align-items:center;justify-content:center;gap:6px;transition:all 0.2s;
+    }
+    .card-sensor-btn:hover { background:linear-gradient(135deg,rgba(0,218,243,0.14),rgba(108,224,0,0.08));border-color:rgba(0,218,243,0.5);box-shadow:0 0 16px rgba(0,218,243,0.15); }
+    .card-sensor-btn:disabled { opacity:0.6;cursor:not-allowed; }
+
+    /* ── AQUARIUM OVERLAY (list page) ── */
+    .swim-fish-l { position:fixed;pointer-events:none;will-change:transform;filter:drop-shadow(0 2px 6px rgba(0,218,243,0.3));z-index:50; }
+    @keyframes swim-r-l { 0%{left:-70px} 100%{left:calc(100% + 70px)} }
+    @keyframes swim-l-l { 0%{left:calc(100% + 70px)} 100%{left:-70px} }
+    @keyframes bob-up-l { 0%,100%{margin-top:0} 25%{margin-top:-10px} 75%{margin-top:8px} }
+    @keyframes bob-dn-l { 0%,100%{margin-top:0} 25%{margin-top:8px} 75%{margin-top:-10px} }
+    @keyframes tail-wag-l { 0%,100%{transform:skewX(0)} 40%{transform:skewX(2deg)} 70%{transform:skewX(-2deg)} }
+    .swim-fish-l svg { animation:tail-wag-l 0.65s ease-in-out infinite;display:block; }
+    #cursor-fish-l { position:fixed;pointer-events:none;z-index:9999;filter:drop-shadow(0 0 8px rgba(0,218,243,0.65)) drop-shadow(0 0 16px rgba(0,218,243,0.25)); }
+    #cursor-fish-l svg { display:block;animation:tail-wag-l 0.4s ease-in-out infinite; }
+    .aq-plant-l { position:fixed;bottom:0;pointer-events:none;transform-origin:bottom center;z-index:51; }
+    @keyframes sway-l2 { 0%,100%{transform:rotate(-4deg)} 50%{transform:rotate(5deg)} }
+    @keyframes sway-r2 { 0%,100%{transform:rotate(4deg)} 50%{transform:rotate(-5deg)} }
+    @keyframes sway-g2 { 0%,100%{transform:rotate(-3deg)} 50%{transform:rotate(3deg)} }
+    .aq-bubble-l { position:fixed;border-radius:50%;pointer-events:none;z-index:51;background:radial-gradient(circle at 35% 32%,rgba(255,255,255,0.55),rgba(0,218,243,0.07));border:1px solid rgba(0,218,243,0.35);box-shadow:inset 0 -2px 3px rgba(255,255,255,0.15); }
+    @keyframes bubble-rise-l { 0%{transform:translateY(0) translateX(0);opacity:0;} 8%{opacity:0.75;} 45%{transform:translateY(-38vh) translateX(8px);} 80%{opacity:0.45;} 100%{transform:translateY(-88vh) translateX(-6px);opacity:0;} }
+  </style>
+</head>
+<body class="flex overflow-hidden h-screen" style="position:relative;z-index:1;">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar flex flex-col h-screen flex-shrink-0" style="z-index:10;position:relative;">
+    <div class="px-5 py-6" style="border-bottom:1px solid #1e2830;">
+      <div class="flex items-center gap-3 mb-1">
+        <div style="width:28px;height:28px;background:linear-gradient(135deg,#00daf3,#0077ff);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#0a0f14;">L</div>
+        <span class="font-bold text-sm" style="color:#dde3ec;">Living Lab</span>
+      </div>
+      <p class="text-xs ml-10" style="color:#3a4a5a;font-family:'JetBrains Mono',monospace;">AQ-SYS v2.4</p>
+    </div>
+    <div class="px-5 py-4" style="border-bottom:1px solid #1e2830;">
+      <div class="flex items-center gap-2">
+        <div class="pulse-dot"></div>
+        <span style="font-size:11px;color:#6ce000;font-family:'JetBrains Mono',monospace;letter-spacing:0.05em;">ALL SENSORS ONLINE</span>
+      </div>
+    </div>
+    <nav class="flex-1 py-4">
+      <div class="px-5 mb-3" style="font-size:10px;color:#3a4a5a;letter-spacing:0.1em;font-family:'JetBrains Mono',monospace;">NAVIGATION</div>
+      <a href="/" class="nav-item"><span class="nav-icon">◈</span> Dashboard</a>
+      <a href="/list" class="nav-item active"><span class="nav-icon">⊞</span> Fish Inventory</a>
+      <a href="/disease" class="nav-item"><span class="nav-icon">⬡</span> Disease Analysis</a>
+      <a href="/aquaponics" class="nav-item"><span class="nav-icon">◎</span> Aquaponics</a>
+      <a href="/chatbot" class="nav-item"><span class="nav-icon">◬</span> AI Assistant</a>
+      <a href="/dimension" class="nav-item"><span class="nav-icon">◭</span> 3D Model</a>
+    </nav>
+
+    <!-- Sidebar bottom: species count + Add Fish -->
+    <div style="border-top:1px solid #1e2830;">
+      <div class="px-5 py-4">
+        <div class="stat-card" style="padding:12px;">
+          <div class="flex justify-between items-center mb-1">
+            <span style="font-size:11px;color:#5a6a7a;">Species</span>
+            <span class="badge badge-cyan" id="speciesCountBadge">3 Types</span>
+          </div>
+          <p class="font-bold" style="color:#00daf3;font-size:13px;">Click to explore</p>
+          <p style="font-size:10px;color:#5a6a7a;margin-top:2px;">Detailed profiles</p>
+        </div>
+      </div>
+      <!-- ADD FISH BUTTON -->
+      <button class="add-fish-btn" onclick="openAddFishModal()">
+        <span class="plus-icon">＋</span>
+        ADD NEW FISH
+      </button>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="flex-1 flex flex-col overflow-hidden" style="position:relative;z-index:1;">
+    <header class="flex justify-between items-center px-8 h-14 flex-shrink-0" style="border-bottom:1px solid #1e2830;background:rgba(10,15,20,0.9);backdrop-filter:blur(20px);">
+      <div>
+        <h1 class="font-bold text-sm" style="color:#dde3ec;">Fish Inventory</h1>
+        <p style="font-size:11px;color:#3a4a5a;font-family:'JetBrains Mono',monospace;">Click any fish card to see full profile</p>
+      </div>
+      <span class="badge badge-cyan" id="headerCountBadge">3 SPECIES</span>
+    </header>
+
+    <main class="flex-1 overflow-y-auto p-8">
+      <div class="grid grid-cols-3 gap-6 anim-1" id="fishGrid">
+
+        <!-- ROHU -->
+        <div class="fish-card" onclick="openDetail('rohu')">
+          <div class="fish-card-img-zone" style="background:linear-gradient(135deg,#0d1d2e,#0a1520);">
+            <div style="position:absolute;top:12px;right:12px;"><span class="badge badge-ok">Healthy</span></div>
+            <img src="/static/assets/rohu.png" class="fish-image" alt="Rohu Fish" />
+            <p class="click-hint mt-2">TAP TO VIEW PROFILE →</p>
+          </div>
+          <div class="fish-card-body">
+            <h3 style="font-size:18px;font-weight:800;margin-bottom:2px;">Rohu</h3>
+            <p style="font-size:11px;color:#5a6a7a;font-style:italic;margin-bottom:14px;">Labeo rohita</p>
+            <div style="flex-wrap:wrap;display:flex;margin-bottom:12px;">
+              <span class="spec-pill spec-green">⬆ High Survival Rate</span>
+              <span class="spec-pill spec-cyan">🌊 Deep Water Adapted</span>
+              <span class="spec-pill spec-green">🌡 Wide Temp Range</span>
+              <span class="spec-pill spec-amber">🍃 Herbivore</span>
+              <span class="spec-pill spec-cyan">⚡ Fast Growth</span>
+            </div>
+            <button class="card-temp-btn" onclick="event.stopPropagation();runCardTempTest('rohu',this)" style="width:100%;padding:8px 0;border-radius:10px;border:1px solid rgba(0,218,243,0.25);background:rgba(0,218,243,0.05);color:#00daf3;font-weight:700;font-size:11px;cursor:pointer;font-family:'Manrope',sans-serif;display:flex;align-items:center;justify-content:center;gap:6px;transition:all 0.2s;">🌡 Test Temperature</button>
+            <div class="card-temp-result" style="display:none;margin-top:8px;border-radius:10px;padding:10px 12px;font-size:11px;"></div>
+          </div>
+        </div>
+
+        <!-- TILAPIA -->
+        <div class="fish-card" onclick="openDetail('tilapia')">
+          <div class="fish-card-img-zone" style="background:linear-gradient(135deg,#1a1000,#120d00);">
+            <div style="position:absolute;top:12px;right:12px;"><span class="badge badge-warn">Watch</span></div>
+            <img src="/static/assets/tilapia.png" class="fish-image" alt="Tilapia Fish" />
+            <p class="click-hint mt-2">TAP TO VIEW PROFILE →</p>
+          </div>
+          <div class="fish-card-body">
+            <h3 style="font-size:18px;font-weight:800;margin-bottom:2px;">Tilapia</h3>
+            <p style="font-size:11px;color:#5a6a7a;font-style:italic;margin-bottom:14px;">Oreochromis niloticus</p>
+            <div style="flex-wrap:wrap;display:flex;margin-bottom:12px;">
+              <span class="spec-pill spec-green">🌡 High Temp Tolerance</span>
+              <span class="spec-pill spec-cyan">💧 Low O₂ Tolerance</span>
+              <span class="spec-pill spec-amber">🦷 Omnivore</span>
+              <span class="spec-pill spec-green">🔄 Hardy Species</span>
+              <span class="spec-pill spec-amber">⚠ Fin Rot Risk</span>
+            </div>
+            <button class="card-temp-btn" onclick="event.stopPropagation();runCardTempTest('tilapia',this)" style="width:100%;padding:8px 0;border-radius:10px;border:1px solid rgba(0,218,243,0.25);background:rgba(0,218,243,0.05);color:#00daf3;font-weight:700;font-size:11px;cursor:pointer;font-family:'Manrope',sans-serif;display:flex;align-items:center;justify-content:center;gap:6px;transition:all 0.2s;">🌡 Test Temperature</button>
+            <div class="card-temp-result" style="display:none;margin-top:8px;border-radius:10px;padding:10px 12px;font-size:11px;"></div>
+          </div>
+        </div>
+
+        <!-- CATLA -->
+        <div class="fish-card" onclick="openDetail('catla')">
+          <div class="fish-card-img-zone" style="background:linear-gradient(135deg,#0a1a0d,#061208);">
+            <div style="position:absolute;top:12px;right:12px;"><span class="badge badge-ok">Healthy</span></div>
+            <img src="/static/assets/catla.png" class="fish-image" alt="Catla Fish" />
+            <p class="click-hint mt-2">TAP TO VIEW PROFILE →</p>
+          </div>
+          <div class="fish-card-body">
+            <h3 style="font-size:18px;font-weight:800;margin-bottom:2px;">Catla</h3>
+            <p style="font-size:11px;color:#5a6a7a;font-style:italic;margin-bottom:14px;">Catla catla</p>
+            <div style="flex-wrap:wrap;display:flex;margin-bottom:12px;">
+              <span class="spec-pill spec-green">⬆ High Survival Rate</span>
+              <span class="spec-pill spec-cyan">🌊 Surface Feeder</span>
+              <span class="spec-pill spec-green">📈 Rapid Growth</span>
+              <span class="spec-pill spec-amber">🌿 Plankton Feeder</span>
+              <span class="spec-pill spec-cyan">💎 Premium Quality</span>
+            </div>
+            <button class="card-temp-btn" onclick="event.stopPropagation();runCardTempTest('catla',this)" style="width:100%;padding:8px 0;border-radius:10px;border:1px solid rgba(0,218,243,0.25);background:rgba(0,218,243,0.05);color:#00daf3;font-weight:700;font-size:11px;cursor:pointer;font-family:'Manrope',sans-serif;display:flex;align-items:center;justify-content:center;gap:6px;transition:all 0.2s;">🌡 Test Temperature</button>
+            <div class="card-temp-result" style="display:none;margin-top:8px;border-radius:10px;padding:10px 12px;font-size:11px;"></div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- ══ DETAIL OVERLAY ══ -->
+  <div class="detail-overlay" id="detailOverlay" onclick="closeDetail(event)">
+    <div class="detail-panel" id="detailPanel">
+      <button class="close-btn" onclick="closeOverlay()">✕</button>
+      <div id="detailContent"></div>
+    </div>
+  </div>
+
+  <!-- ══ ADD FISH MODAL ══ -->
+  <div class="add-modal-overlay" id="addFishModal" onclick="closeAddModalOutside(event)">
+    <div class="add-modal" id="addFishPanel">
+      <div class="modal-header">
+        <div>
+          <h2 style="font-size:18px;font-weight:800;margin:0 0 3px;">Add New Fish Species</h2>
+          <p style="font-size:11px;color:#5a6a7a;margin:0;font-family:'JetBrains Mono',monospace;">Fill in profile · drag-drop photo to upload</p>
+        </div>
+        <button class="close-btn" style="position:static;" onclick="closeAddModal()">✕</button>
+      </div>
+
+      <div class="modal-body">
+
+        <!-- IMAGE UPLOAD -->
+        <div class="section-divider">📷 Fish Photo</div>
+        <div class="drop-zone" id="dropZone">
+          <input type="file" id="fishImageInput" accept="image/png,image/jpeg,image/webp" onchange="handleFileSelect(event)" />
+          <div id="dropContent">
+            <div style="font-size:36px;margin-bottom:10px;opacity:0.4;">🐟</div>
+            <p style="font-size:13px;font-weight:700;color:#5a6a7a;margin:0 0 4px;">Drag & drop fish PNG here</p>
+            <p style="font-size:11px;color:#3a4a5a;margin:0;font-family:'JetBrains Mono',monospace;">or click to browse · PNG / JPG / WEBP</p>
+          </div>
+          <div id="dropPreview" style="display:none;flex-direction:column;align-items:center;">
+            <img id="previewImg" class="drop-preview" src="" alt="Preview" />
+            <p id="previewName" style="font-size:11px;color:#00daf3;font-family:'JetBrains Mono',monospace;margin:0;"></p>
+            <p style="font-size:10px;color:#3a4a5a;margin:4px 0 0;font-family:'JetBrains Mono',monospace;">Click to change image</p>
+          </div>
+        </div>
+        <p style="font-size:10px;color:#3a4a5a;font-family:'JetBrains Mono',monospace;margin:6px 0 0;">Place your PNG in <span style="color:#00daf3;">assets/</span> folder — filename will be used as image path</p>
+
+        <!-- BASIC INFO -->
+        <div class="section-divider">🐠 Basic Information</div>
+        <div class="grid-2">
+          <div>
+            <label class="form-label">Common Name *</label>
+            <input class="form-input" id="fishName" type="text" placeholder="e.g. Grass Carp" />
+          </div>
+          <div>
+            <label class="form-label">Latin / Scientific Name</label>
+            <input class="form-input" id="fishLatin" type="text" placeholder="e.g. Ctenopharyngodon idella" />
+          </div>
+        </div>
+        <div class="grid-2">
+          <div>
+            <label class="form-label">Status</label>
+            <select class="form-input" id="fishStatus">
+              <option value="Healthy">✅ Healthy</option>
+              <option value="Watch">⚠️ Watch</option>
+              <option value="Critical">🔴 Critical</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label">Emoji (fallback if no image)</label>
+            <input class="form-input" id="fishEmoji" type="text" placeholder="🐟" maxlength="4" style="font-size:20px;" />
+          </div>
+        </div>
+        <div style="margin-bottom:14px;">
+          <label class="form-label">Description</label>
+          <textarea class="form-input" id="fishDesc" rows="3" placeholder="Describe the species, habitat, and aquaculture value..." style="resize:vertical;"></textarea>
+        </div>
+
+        <!-- WATER PARAMETERS -->
+        <div class="section-divider">💧 Water Parameters</div>
+        <div class="grid-3">
+          <div>
+            <label class="form-label">pH Min</label>
+            <input class="form-input" id="phMin" type="number" step="0.1" placeholder="6.5" />
+          </div>
+          <div>
+            <label class="form-label">pH Max</label>
+            <input class="form-input" id="phMax" type="number" step="0.1" placeholder="8.5" />
+          </div>
+          <div>
+            <label class="form-label">pH Ideal Range</label>
+            <input class="form-input" id="phIdeal" type="text" placeholder="7.0 – 8.0" />
+          </div>
+        </div>
+        <div class="grid-3">
+          <div>
+            <label class="form-label">Temp Min</label>
+            <input class="form-input" id="tempMin" type="text" placeholder="20°C" />
+          </div>
+          <div>
+            <label class="form-label">Temp Max</label>
+            <input class="form-input" id="tempMax" type="text" placeholder="35°C" />
+          </div>
+          <div>
+            <label class="form-label">Temp Ideal</label>
+            <input class="form-input" id="tempIdeal" type="text" placeholder="25 – 30°C" />
+          </div>
+        </div>
+        <div class="grid-3">
+          <div>
+            <label class="form-label">Turbidity Level</label>
+            <input class="form-input" id="turbLevel" type="text" placeholder="Moderate" />
+          </div>
+          <div>
+            <label class="form-label">NTU Range</label>
+            <input class="form-input" id="turbNtu" type="text" placeholder="20–40 NTU" />
+          </div>
+          <div>
+            <label class="form-label">Turbidity Note</label>
+            <input class="form-input" id="turbNote" type="text" placeholder="Tolerates turbid water" />
+          </div>
+        </div>
+        <div class="grid-3">
+          <div>
+            <label class="form-label">Depth Min</label>
+            <input class="form-input" id="depthMin" type="text" placeholder="1m" />
+          </div>
+          <div>
+            <label class="form-label">Depth Max</label>
+            <input class="form-input" id="depthMax" type="text" placeholder="3m" />
+          </div>
+          <div>
+            <label class="form-label">Depth Ideal</label>
+            <input class="form-input" id="depthIdeal" type="text" placeholder="1.5 – 2m" />
+          </div>
+        </div>
+        <div style="margin-bottom:14px;">
+          <label class="form-label">Climate / Habitat</label>
+          <input class="form-input" id="fishClimate" type="text" placeholder="Tropical · Subtropical · Warm temperate" />
+        </div>
+
+        <!-- SURVIVAL & GROWTH -->
+        <div class="section-divider">📈 Performance</div>
+        <div class="grid-2">
+          <div>
+            <label class="form-label">Survival Rate</label>
+            <input class="form-input" id="fishSurvival" type="text" placeholder="90–95%" />
+          </div>
+          <div>
+            <label class="form-label">Growth Rate</label>
+            <input class="form-input" id="fishGrowth" type="text" placeholder="1–2 kg/year" />
+          </div>
+        </div>
+
+        <!-- DIET -->
+        <div class="section-divider">🍽 Diet & Feeding</div>
+        <label class="form-label">Food items (press Enter or comma to add)</label>
+        <div class="tag-input-wrap" id="foodTagWrap" onclick="document.getElementById('foodTagInput').focus()">
+          <input class="tag-chip-input" id="foodTagInput" placeholder="Type food item & press Enter..." onkeydown="handleTagKey(event,'food')" />
+        </div>
+        <p style="font-size:10px;color:#3a4a5a;margin:5px 0 0;font-family:'JetBrains Mono',monospace;">e.g. Rice bran, Pellets, Algae</p>
+
+        <!-- SPEC PILLS -->
+        <div class="section-divider">🏷 Spec Tags (shown on card)</div>
+        <label class="form-label">Tags (press Enter or comma to add · use emoji prefix like ⚡ Fast Growth)</label>
+        <div class="tag-input-wrap" id="specTagWrap" onclick="document.getElementById('specTagInput').focus()">
+          <input class="tag-chip-input" id="specTagInput" placeholder="⚡ Fast Growth, 🌊 Deep Water Adapted..." onkeydown="handleTagKey(event,'spec')" />
+        </div>
+
+        <!-- DISEASES -->
+        <div class="section-divider">🦠 Possible Diseases</div>
+        <div id="diseaseRows"></div>
+        <button class="add-row-btn" onclick="addDiseaseRow()">＋ Add Disease</button>
+
+      </div>
+
+      <div class="modal-footer">
+        <button class="cancel-btn" onclick="closeAddModal()">Cancel</button>
+        <button class="save-btn" onclick="saveNewFish()">＋ Add to Inventory</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ══════════════════════════════════════════════
+   FISH DATA  — original 3 seeded fish
+══════════════════════════════════════════════ */
+const fishData = {
+  rohu: {
+    name: 'Rohu', latin: 'Labeo rohita', emoji: '🐟', status: 'Healthy', statusClass: 'badge-ok',
+    imgSrc: '/static/assets/rohu.png',
+    description: 'One of the most important aquaculture fish in South Asia, prized for its fast growth and adaptability. Rohu thrives in warm, deep water and is ideal for pond-based systems.',
+    ph: { min: 7.0, max: 8.5, ideal: '7.5 – 8.0' },
+    temp: { min: '24°C', max: '32°C', ideal: '26 – 30°C' },
+    turbidity: { level: 'Moderate', ntu: '20–40 NTU', note: 'Can tolerate turbid water well' },
+    depth: { min: '1.5m', max: '3m', ideal: '2m+' },
+    climate: 'Tropical & subtropical · Humid regions · Monsoon-tolerant',
+    food: ['Rice bran', 'Mustard oil cake', 'Fishmeal pellets', 'Aquatic plants', 'Plankton'],
+    diseases: [
+      { name: 'Epizootic Ulcerative Syndrome (EUS)', risk: 'high', desc: 'Fungal-bacterial lesions, especially in monsoon season' },
+      { name: 'Argulosis (Fish Lice)', risk: 'medium', desc: 'External parasite causing restlessness and scale damage' },
+      { name: 'Columnaris Disease', risk: 'low', desc: 'Bacterial infection affecting gills and fins in warm water' }
+    ],
+    survival: '92–96%', growth: '1–1.5 kg/year',
+    pills: [
+      { label: '⬆ High Survival Rate', cls: 'spec-green' }, { label: '🌊 Deep Water Adapted', cls: 'spec-cyan' },
+      { label: '🌡 Wide Temp Range', cls: 'spec-green' }, { label: '🍃 Herbivore', cls: 'spec-amber' }, { label: '⚡ Fast Growth', cls: 'spec-cyan' }
+    ]
+  },
+  tilapia: {
+    name: 'Tilapia', latin: 'Oreochromis niloticus', emoji: '🐠', status: 'Watch', statusClass: 'badge-warn',
+    imgSrc: '/static/assets/tilapia.png',
+    description: 'Extremely hardy and adaptable, Tilapia is one of the most farmed fish globally. Can survive in low oxygen and saline conditions, but is currently flagged for monitoring due to fin rot signs.',
+    ph: { min: 6.5, max: 8.5, ideal: '6.5 – 8.5' },
+    temp: { min: '20°C', max: '35°C', ideal: '25 – 30°C' },
+    turbidity: { level: 'High Tolerance', ntu: '10–200 NTU', note: 'Adapts to wide range of water clarity' },
+    depth: { min: '0.5m', max: '2.5m', ideal: '1 – 1.5m' },
+    climate: 'Tropical · Warm temperate · Tolerates brackish water',
+    food: ['Commercial pellets', 'Algae & phytoplankton', 'Duckweed', 'Vegetable scraps', 'Insect larvae'],
+    diseases: [
+      { name: 'Fin Rot', risk: 'high', desc: 'Bacterial infection causing fin tissue degradation — currently detected' },
+      { name: 'Ich (White Spot)', risk: 'medium', desc: 'Protozoan parasite forming white cysts on skin and gills' },
+      { name: 'Streptococcosis', risk: 'medium', desc: 'Bacterial infection causing erratic swimming and eye opacity' },
+      { name: 'Columnaris', risk: 'low', desc: 'Saddle-back lesions near dorsal fin, common in warm tanks' }
+    ],
+    survival: '85–90%', growth: '0.5–1 kg/6 months',
+    pills: [
+      { label: '🌡 High Temp Tolerance', cls: 'spec-green' }, { label: '💧 Low O₂ Tolerance', cls: 'spec-cyan' },
+      { label: '🦷 Omnivore', cls: 'spec-amber' }, { label: '🔄 Hardy Species', cls: 'spec-green' }, { label: '⚠ Fin Rot Risk', cls: 'spec-amber' }
+    ]
+  },
+  catla: {
+    name: 'Catla', latin: 'Catla catla', emoji: '🐡', status: 'Healthy', statusClass: 'badge-ok',
+    imgSrc: null,
+    description: 'The largest of the Indian major carps, Catla is a surface and mid-water feeder known for its premium flesh quality and rapid growth. Ideal for polyculture systems alongside Rohu.',
+    ph: { min: 7.0, max: 8.5, ideal: '7.0 – 8.0' },
+    temp: { min: '18°C', max: '32°C', ideal: '24 – 30°C' },
+    turbidity: { level: 'Low–Moderate', ntu: '10–30 NTU', note: 'Prefers clearer water for plankton feeding' },
+    depth: { min: '1m', max: '4m', ideal: '1.5 – 3m' },
+    climate: 'Subtropical to tropical · Prefers clean riverine-style conditions',
+    food: ['Zooplankton', 'Phytoplankton', 'Supplementary pellets', 'Soybean meal', 'Groundnut cake'],
+    diseases: [
+      { name: 'Dropsy (Bloat)', risk: 'medium', desc: 'Bacterial infection causing abdominal swelling and scale protrusion' },
+      { name: 'Gill Rot', risk: 'medium', desc: 'Fungal/bacterial deterioration of gill tissue, often linked to poor aeration' },
+      { name: 'Anchor Worm (Lernaea)', risk: 'low', desc: 'Parasitic copepod embedded in skin causing inflammation' }
+    ],
+    survival: '90–95%', growth: '1–2 kg/year',
+    pills: [
+      { label: '⬆ High Survival Rate', cls: 'spec-green' }, { label: '🌊 Surface Feeder', cls: 'spec-cyan' },
+      { label: '📈 Rapid Growth', cls: 'spec-green' }, { label: '🌿 Plankton Feeder', cls: 'spec-amber' }, { label: '💎 Premium Quality', cls: 'spec-cyan' }
+    ]
+  }
+};
+
+/* ══════════════════════════════════════════════
+   CATALOGUE FISH  — 23 species from final.txt
+══════════════════════════════════════════════ */
+const catalogueFish = {
+  mrigal:{name:'Mrigal',latin:'Cirrhinus mrigala',emoji:'🐟',status:'Healthy',statusClass:'badge-ok',imgSrc:'/static/assets/mrigal.png',
+    description:'Bottom feeder fish widely used in Indian polyculture systems. Well suited for pond cultivation alongside surface and mid-water feeders.',
+    ph:{min:6.5,max:8.0,ideal:'6.5 – 8.0'},temp:{min:'24°C',max:'30°C',ideal:'24 – 30°C'},
+    turbidity:{level:'Moderate',ntu:'20–40 NTU',note:'Tolerates moderate turbidity'},depth:{min:'1m',max:'3m',ideal:'1.5 – 2.5m'},
+    climate:'Tropical · Subtropical · South Asian river systems',
+    food:['Algae','Detritus','Rice bran'],
+    diseases:[{name:'Gill rot',risk:'low',desc:'Fungal/bacterial deterioration of gill tissue'},{name:'Bacterial infection',risk:'medium',desc:'General bacterial infection affecting skin and fins'}],
+    survival:'88–93%',growth:'1–1.5 kg/year',
+    pills:[{label:'⚡ Fast Growth',cls:'spec-cyan'},{label:'🌊 Bottom Feeder',cls:'spec-green'}]},
+
+  common_carp:{name:'Common Carp',latin:'Cyprinus carpio',emoji:'🐟',status:'Healthy',statusClass:'badge-ok',imgSrc:'/static/assets/common_carp.png',
+    description:'Hardy fish suitable for beginners and aquaponics. Extremely adaptable to varying water conditions and management styles.',
+    ph:{min:6.0,max:9.0,ideal:'6.5 – 8.5'},temp:{min:'20°C',max:'30°C',ideal:'22 – 28°C'},
+    turbidity:{level:'High Tolerance',ntu:'10–150 NTU',note:'Adapts to wide range of clarity'},depth:{min:'0.8m',max:'4m',ideal:'1 – 2m'},
+    climate:'Temperate · Subtropical · Widespread globally',
+    food:['Worms','Plants','Pellets'],
+    diseases:[{name:'Fungal infection',risk:'low',desc:'Cotton-like fungal growth on skin or wounds'}],
+    survival:'90–95%',growth:'1–1.5 kg/year',
+    pills:[{label:'💪 Hardy',cls:'spec-green'},{label:'🌱 Easy to Grow',cls:'spec-cyan'}]},
+
+  grass_carp:{name:'Grass Carp',latin:'Ctenopharyngodon idella',emoji:'🐟',status:'Healthy',statusClass:'badge-ok',imgSrc:'/static/assets/grass_carp.png',
+    description:'Herbivorous fish used for controlling aquatic plants. Excellent for weed management in ponds and waterways.',
+    ph:{min:6.5,max:8.0,ideal:'6.5 – 8.0'},temp:{min:'20°C',max:'30°C',ideal:'22 – 28°C'},
+    turbidity:{level:'Moderate',ntu:'15–40 NTU',note:'Prefers moderate clarity for feeding'},depth:{min:'1m',max:'4m',ideal:'1.5 – 3m'},
+    climate:'Temperate to tropical · Riverine environments',
+    food:['Grass','Plants','Aquatic weeds'],
+    diseases:[{name:'Low disease risk',risk:'low',desc:'Generally hardy with few reported disease issues'}],
+    survival:'90–95%',growth:'2–3 kg/year',
+    pills:[{label:'🌿 Plant Eater',cls:'spec-green'},{label:'⚡ Fast Growth',cls:'spec-cyan'}]},
+
+  silver_carp:{name:'Silver Carp',latin:'Hypophthalmichthys molitrix',emoji:'🐟',status:'Healthy',statusClass:'badge-ok',imgSrc:'/static/assets/silver_carp.png',
+    description:'Feeds on plankton and actively improves water quality by filtering algae. Ideal for polyculture systems.',
+    ph:{min:6.5,max:8.0,ideal:'6.5 – 8.0'},temp:{min:'20°C',max:'30°C',ideal:'22 – 28°C'},
+    turbidity:{level:'Low–Moderate',ntu:'10–30 NTU',note:'Filters water while feeding'},depth:{min:'1m',max:'4m',ideal:'1.5 – 3m'},
+    climate:'Temperate to subtropical · River and pond systems',
+    food:['Phytoplankton','Algae'],
+    diseases:[{name:'Low disease risk',risk:'low',desc:'Hardy species with low incidence of disease'}],
+    survival:'88–93%',growth:'2–3 kg/year',
+    pills:[{label:'🌊 Water Cleaner',cls:'spec-cyan'},{label:'⚡ Fast Growth',cls:'spec-green'}]},
+
+  pangasius:{name:'Pangasius',latin:'Pangasianodon hypophthalmus',emoji:'🐠',status:'Watch',statusClass:'badge-warn',imgSrc:'/static/assets/pangasius.png',
+    description:'Fast-growing commercial fish widely farmed across Southeast Asia. Flagged for monitoring due to bacterial disease risk.',
+    ph:{min:6.5,max:8.0,ideal:'6.5 – 7.5'},temp:{min:'25°C',max:'32°C',ideal:'26 – 30°C'},
+    turbidity:{level:'High Tolerance',ntu:'20–100 NTU',note:'Tolerates murky pond conditions'},depth:{min:'1m',max:'5m',ideal:'2 – 4m'},
+    climate:'Tropical · Mekong basin origin · Warm climates',
+    food:['Pellets','Fishmeal'],
+    diseases:[{name:'Bacterial infection',risk:'medium',desc:'Prone to bacterial outbreaks in high-density culture'}],
+    survival:'82–88%',growth:'3–4 kg/year',
+    pills:[{label:'⚡ Ultra Fast Growth',cls:'spec-cyan'},{label:'🏭 Commercial',cls:'spec-amber'}]},
+
+  singhi:{name:'Singhi (Catfish)',latin:'Heteropneustes fossilis',emoji:'🐟',status:'Healthy',statusClass:'badge-ok',imgSrc:'/static/assets/singhi.png',
+    description:'Air-breathing catfish that survives in low oxygen environments. Extremely hardy and valued in local markets.',
+    ph:{min:6.0,max:8.0,ideal:'6.5 – 7.5'},temp:{min:'24°C',max:'30°C',ideal:'25 – 28°C'},
+    turbidity:{level:'High Tolerance',ntu:'20–80 NTU',note:'Survives in low-quality water'},depth:{min:'0.5m',max:'2m',ideal:'1 – 1.5m'},
+    climate:'Tropical · South Asian ponds · Seasonal wetlands',
+    food:['Insects','Small fish','Worms'],
+    diseases:[{name:'Low disease risk',risk:'low',desc:'Very hardy with strong natural immunity'}],
+    survival:'88–94%',growth:'Medium',
+    pills:[{label:'💪 Low Oxygen Survivor',cls:'spec-green'},{label:'🌧 Hardy',cls:'spec-cyan'}]},
+
+  freshwater_prawn:{name:'Freshwater Prawn',latin:'Macrobrachium rosenbergii',emoji:'🦐',status:'Healthy',statusClass:'badge-ok',imgSrc:'/static/assets/freshwater_prawn.png',
+    description:'Highly profitable aquaculture species. Grows well in warm ponds and commands premium market prices.',
+    ph:{min:7.0,max:8.0,ideal:'7.0 – 8.0'},temp:{min:'25°C',max:'31°C',ideal:'26 – 30°C'},
+    turbidity:{level:'Low–Moderate',ntu:'10–30 NTU',note:'Prefers clearer water for feeding'},depth:{min:'0.8m',max:'2m',ideal:'1 – 1.5m'},
+    climate:'Tropical · Brackish to freshwater · Estuarine systems',
+    food:['Pellets','Organic matter','Algae'],
+    diseases:[{name:'Shell disease',risk:'low',desc:'Bacterial erosion of shell surface, linked to poor water quality'}],
+    survival:'75–85%',growth:'Medium',
+    pills:[{label:'💰 High Value',cls:'spec-green'},{label:'🦐 Aquaculture',cls:'spec-cyan'}]},
+
+  climbing_perch:{name:'Climbing Perch',latin:'Anabas testudineus',emoji:'🐟',status:'Healthy',statusClass:'badge-ok',imgSrc:'/static/assets/climbing_perch.png',
+    description:'Can survive outside water for short periods using its labyrinth organ. Extremely resilient and suitable for difficult farming conditions.',
+    ph:{min:6.0,max:8.0,ideal:'6.5 – 7.5'},temp:{min:'24°C',max:'30°C',ideal:'25 – 28°C'},
+    turbidity:{level:'High Tolerance',ntu:'20–100 NTU',note:'Survives in challenging conditions'},depth:{min:'0.5m',max:'2m',ideal:'0.8 – 1.5m'},
+    climate:'Tropical · South and Southeast Asia · Floodplains',
+    food:['Small insects','Worms','Organic debris'],
+    diseases:[{name:'Low disease risk',risk:'low',desc:'Highly resilient species'}],
+    survival:'85–92%',growth:'Slow',
+    pills:[{label:'🧗 Air Breather',cls:'spec-green'},{label:'💪 Extreme Survival',cls:'spec-cyan'}]},
+
+  black_carp:{name:'Black Carp',latin:'Labeo calbasu',emoji:'🐟',status:'Healthy',statusClass:'badge-ok',imgSrc:'/static/assets/black_carp.png',
+    description:'Bottom feeder carp well-suited for pond polyculture systems. Feeds on detritus and helps improve pond floor conditions.',
+    ph:{min:6.5,max:8.0,ideal:'6.5 – 8.0'},temp:{min:'24°C',max:'30°C',ideal:'25 – 28°C'},
+    turbidity:{level:'Moderate',ntu:'20–40 NTU',note:'Prefers moderate clarity'},depth:{min:'1m',max:'3m',ideal:'1.5 – 2.5m'},
+    climate:'Tropical · South Asian ponds and rivers',
+    food:['Detritus','Algae','Organic matter'],
+    diseases:[{name:'Bacterial infection',risk:'low',desc:'Occasional bacterial infections in poor water conditions'}],
+    survival:'88–93%',growth:'1–1.5 kg/year',
+    pills:[{label:'🌊 Bottom Feeder',cls:'spec-green'},{label:'💪 Hardy',cls:'spec-cyan'}]},
+
+  bata_fish:{name:'Bata Fish',latin:'Labeo bata',emoji:'🐟',status:'Healthy',statusClass:'badge-ok',imgSrc:'/static/assets/bata_fish.png',
+    description:'Small carp species suitable for mixed culture ponds. Commonly farmed alongside major carps in polyculture systems.',
+    ph:{min:6.5,max:8.0,ideal:'6.5 – 8.0'},temp:{min:'24°C',max:'30°C',ideal:'25 – 28°C'},
+    turbidity:{level:'Moderate',ntu:'15–35 NTU',note:'Tolerates moderate turbidity'},depth:{min:'0.8m',max:'2.5m',ideal:'1 – 2m'},
+    climate:'Tropical · South Asian pond systems',
+    food:['Plankton','Algae'],
+    diseases:[{name:'Low disease risk',risk:'low',desc:'Generally healthy in well-maintained ponds'}],
+    survival:'85–91%',growth:'Medium',
+    pills:[{label:'🐟 Small Size',cls:'spec-cyan'},{label:'🌿 Easy Culture',cls:'spec-green'}]},
+
+  minor_carp:{name:'Minor Carp (Kuria)',latin:'Labeo gonius',emoji:'🐟',status:'Healthy',statusClass:'badge-ok',imgSrc:'/static/assets/minor_carp.png',
+    description:'Indigenous carp found in South Indian ponds and rivers. Valued in local markets and well-adapted to regional conditions.',
+    ph:{min:6.5,max:8.0,ideal:'6.5 – 8.0'},temp:{min:'22°C',max:'30°C',ideal:'24 – 28°C'},
+    turbidity:{level:'Moderate',ntu:'15–40 NTU',note:'Typical pond conditions'},depth:{min:'1m',max:'3m',ideal:'1.5 – 2m'},
+    climate:'Tropical · South Indian rivers and ponds',
+    food:['Algae','Organic debris'],
+    diseases:[{name:'Low disease risk',risk:'low',desc:'Hardy indigenous species'}],
+    survival:'86–92%',growth:'Medium',
+    pills:[{label:'🌊 Native Species',cls:'spec-cyan'},{label:'💪 Hardy',cls:'spec-green'}]},
+
+  mola_carplet:{name:'Mola Carplet',latin:'Amblypharyngodon mola',emoji:'🐟',status:'Healthy',statusClass:'badge-ok',imgSrc:'/static/assets/mola_carplet.png',
+    description:'Small nutrient-rich fish that grows well in ponds. Rich in micronutrients and valuable for integrated farming.',
+    ph:{min:6.0,max:8.0,ideal:'6.5 – 7.5'},temp:{min:'24°C',max:'30°C',ideal:'25 – 28°C'},
+    turbidity:{level:'Moderate',ntu:'15–40 NTU',note:'Typical pond conditions'},depth:{min:'0.5m',max:'2m',ideal:'0.8 – 1.5m'},
+    climate:'Tropical · South Asian floodplains and ponds',
+    food:['Plankton','Microalgae'],
+    diseases:[{name:'Very low risk',risk:'low',desc:'Rarely affected by disease in managed ponds'}],
+    survival:'85–92%',growth:'Fast (small size)',
+    pills:[{label:'🐟 Small Fish',cls:'spec-cyan'},{label:'⚡ Fast Breeding',cls:'spec-green'}]},
+
+  mystus_catfish:{name:'Mystus Catfish',latin:'Mystus tengara',emoji:'🐠',status:'Watch',statusClass:'badge-warn',imgSrc:'/static/assets/mystus_catfish.png',
+    description:'Small catfish species found in Indian freshwater bodies. Nocturnal and carnivorous; requires monitoring in culture systems.',
+    ph:{min:6.0,max:8.0,ideal:'6.5 – 7.5'},temp:{min:'24°C',max:'30°C',ideal:'25 – 28°C'},
+    turbidity:{level:'Moderate',ntu:'20–50 NTU',note:'Prefers moderate clarity'},depth:{min:'0.8m',max:'3m',ideal:'1 – 2m'},
+    climate:'Tropical · South Asian freshwater systems',
+    food:['Insects','Small organisms','Worms'],
+    diseases:[{name:'Medium disease risk',risk:'medium',desc:'Susceptible to infections under stress conditions'}],
+    survival:'80–87%',growth:'Medium',
+    pills:[{label:'🌙 Nocturnal',cls:'spec-amber'},{label:'🐛 Carnivorous',cls:'spec-cyan'}]},
+
+  striped_catfish:{name:'Striped Catfish',latin:'Pangasius pangasius',emoji:'🐠',status:'Watch',statusClass:'badge-warn',imgSrc:'/static/assets/striped_catfish.png',
+    description:'Native pangasius species suitable for ponds. Fast-growing commercial fish with medium disease risk in intensive culture.',
+    ph:{min:6.5,max:8.0,ideal:'6.5 – 7.5'},temp:{min:'25°C',max:'32°C',ideal:'26 – 30°C'},
+    turbidity:{level:'High Tolerance',ntu:'20–80 NTU',note:'Tolerates murky water'},depth:{min:'1m',max:'5m',ideal:'2 – 3m'},
+    climate:'Tropical · South and Southeast Asian rivers',
+    food:['Pellets','Organic matter'],
+    diseases:[{name:'Medium disease risk',risk:'medium',desc:'Prone to bacterial and parasitic infections in crowded ponds'}],
+    survival:'80–87%',growth:'Fast',
+    pills:[{label:'⚡ Fast Growth',cls:'spec-cyan'},{label:'🏭 Commercial',cls:'spec-amber'}]},
+
+  featherback:{name:'Featherback',latin:'Notopterus notopterus',emoji:'🐠',status:'Watch',statusClass:'badge-warn',imgSrc:'/static/assets/featherback.png',
+    description:'Indigenous fish requiring good water quality. Has an exotic appearance and is sensitive to environmental changes.',
+    ph:{min:6.5,max:8.0,ideal:'6.5 – 7.5'},temp:{min:'24°C',max:'30°C',ideal:'25 – 28°C'},
+    turbidity:{level:'Low–Moderate',ntu:'10–30 NTU',note:'Sensitive to poor water quality'},depth:{min:'1m',max:'3m',ideal:'1.5 – 2.5m'},
+    climate:'Tropical · South and Southeast Asian rivers and ponds',
+    food:['Small fish','Insects'],
+    diseases:[{name:'Medium disease risk',risk:'medium',desc:'Susceptible to water quality changes and stress-related infections'}],
+    survival:'75–83%',growth:'Medium',
+    pills:[{label:'🐠 Exotic Look',cls:'spec-cyan'},{label:'⚠️ Sensitive',cls:'spec-amber'}]},
+
+  spotted_snakehead:{name:'Spotted Snakehead',latin:'Channa punctata',emoji:'🐠',status:'Watch',statusClass:'badge-warn',imgSrc:'/static/assets/spotted_snakehead.png',
+    description:'Common freshwater predator in Indian ponds. Requires monitoring in polyculture as it may prey on smaller fish.',
+    ph:{min:6.0,max:8.0,ideal:'6.5 – 7.5'},temp:{min:'24°C',max:'30°C',ideal:'25 – 28°C'},
+    turbidity:{level:'High Tolerance',ntu:'20–80 NTU',note:'Tolerates a range of conditions'},depth:{min:'0.5m',max:'3m',ideal:'1 – 2m'},
+    climate:'Tropical · South Asian ponds, rivers, floodplains',
+    food:['Small fish','Insects','Frogs'],
+    diseases:[{name:'Medium disease risk',risk:'medium',desc:'Occasional bacterial and parasitic infections'}],
+    survival:'82–89%',growth:'Medium',
+    pills:[{label:'🐍 Predator',cls:'spec-amber'},{label:'💪 Hardy',cls:'spec-green'}]},
+
+  indian_glass_fish:{name:'Indian Glass Fish',latin:'Parambassis ranga',emoji:'🐟',status:'Healthy',statusClass:'badge-ok',imgSrc:'/static/assets/indian_glass_fish.png',
+    description:'Small transparent fish suitable for controlled aquaculture systems. Striking appearance makes it valuable decoratively.',
+    ph:{min:6.5,max:8.0,ideal:'6.5 – 7.5'},temp:{min:'24°C',max:'30°C',ideal:'25 – 28°C'},
+    turbidity:{level:'Low',ntu:'5–20 NTU',note:'Prefers clear water'},depth:{min:'0.5m',max:'2m',ideal:'0.8 – 1.5m'},
+    climate:'Tropical · South Asian ponds and rivers',
+    food:['Plankton','Small invertebrates'],
+    diseases:[{name:'Low disease risk',risk:'low',desc:'Healthy in well-maintained clear water systems'}],
+    survival:'82–88%',growth:'Slow',
+    pills:[{label:'🔍 Transparent',cls:'spec-cyan'},{label:'🐟 Decorative',cls:'spec-green'}]},
+
+  red_belly_tilapia:{name:'Red Belly Tilapia',latin:'Tilapia zillii',emoji:'🐟',status:'Healthy',statusClass:'badge-ok',imgSrc:'/static/assets/red_belly_tilapia.png',
+    description:'Variant of tilapia that grows well in warm climates. Hardy and fast-growing, suitable for pond and tank culture.',
+    ph:{min:6.0,max:9.0,ideal:'6.5 – 8.5'},temp:{min:'25°C',max:'32°C',ideal:'26 – 30°C'},
+    turbidity:{level:'High Tolerance',ntu:'10–200 NTU',note:'Adapts to wide range of water clarity'},depth:{min:'0.5m',max:'2m',ideal:'1 – 1.5m'},
+    climate:'Tropical · Warm temperate · Brackish tolerance',
+    food:['Algae','Pellets','Duckweed'],
+    diseases:[{name:'Low disease risk',risk:'low',desc:'Generally healthy with proper management'}],
+    survival:'85–91%',growth:'Fast',
+    pills:[{label:'🚀 Fast Growth',cls:'spec-cyan'},{label:'💪 Hardy',cls:'spec-green'}]},
+
+  indian_major_catfish:{name:'Indian Major Catfish',latin:'Wallago attu',emoji:'🐠',status:'Watch',statusClass:'badge-warn',imgSrc:'/static/assets/indian_major_catfish.png',
+    description:'Large predator fish that requires large ponds. Commands high market value but needs careful management in polyculture.',
+    ph:{min:6.0,max:8.0,ideal:'6.5 – 7.5'},temp:{min:'24°C',max:'30°C',ideal:'25 – 28°C'},
+    turbidity:{level:'Moderate',ntu:'20–60 NTU',note:'Tolerates moderate turbidity'},depth:{min:'2m',max:'6m',ideal:'3 – 5m'},
+    climate:'Tropical · South Asian large rivers and reservoirs',
+    food:['Fish','Meat','Large invertebrates'],
+    diseases:[{name:'Medium disease risk',risk:'medium',desc:'Bacterial infections in high-density systems'}],
+    survival:'78–85%',growth:'Fast',
+    pills:[{label:'🐯 Predator',cls:'spec-amber'},{label:'⚠️ Large System',cls:'spec-cyan'}]},
+
+  puntius:{name:'Puntius (Small Barb)',latin:'Puntius sophore',emoji:'🐟',status:'Healthy',statusClass:'badge-ok',imgSrc:'/static/assets/puntius.png',
+    description:'Small native fish found in South Indian ponds. Fast-breeding and easy to maintain in polyculture systems.',
+    ph:{min:6.0,max:8.0,ideal:'6.5 – 7.5'},temp:{min:'22°C',max:'30°C',ideal:'24 – 28°C'},
+    turbidity:{level:'Moderate',ntu:'15–35 NTU',note:'Typical pond conditions'},depth:{min:'0.5m',max:'2m',ideal:'0.8 – 1.5m'},
+    climate:'Tropical · South Indian rivers and tanks',
+    food:['Plankton','Microorganisms'],
+    diseases:[{name:'Low disease risk',risk:'low',desc:'Hardy native species'}],
+    survival:'85–92%',growth:'Fast (small)',
+    pills:[{label:'🐟 Native',cls:'spec-cyan'},{label:'⚡ Fast Breeding',cls:'spec-green'}]},
+};
+
+// Merge into main fishData
+Object.assign(fishData, catalogueFish);
+
+/* ══════════════════════════════════════════════
+   TAG SYSTEM
+══════════════════════════════════════════════ */
+const tags = { food: [], spec: [] };
+
+function handleTagKey(e, type) {
+  if (e.key === 'Enter' || e.key === ',') {
+    e.preventDefault();
+    const val = e.target.value.replace(/,$/, '').trim();
+    if (val) addTag(type, val);
+    e.target.value = '';
+  }
+  if (e.key === 'Backspace' && e.target.value === '' && tags[type].length > 0) {
+    removeTag(type, tags[type].length - 1);
+  }
+}
+function addTag(type, val) { tags[type].push(val); renderTags(type); }
+function removeTag(type, idx) { tags[type].splice(idx, 1); renderTags(type); }
+function renderTags(type) {
+  const wrap = document.getElementById(type + 'TagWrap');
+  const input = document.getElementById(type + 'TagInput');
+  wrap.querySelectorAll('.tag-chip').forEach(c => c.remove());
+  tags[type].forEach((t, i) => {
+    const chip = document.createElement('span');
+    chip.className = 'tag-chip';
+    chip.innerHTML = `${t}<button onclick="removeTag('${type}',${i})" title="Remove">×</button>`;
+    wrap.insertBefore(chip, input);
+  });
+}
+
+/* ══════════════════════════════════════════════
+   DISEASE ROWS
+══════════════════════════════════════════════ */
+let diseaseCount = 0;
+function addDiseaseRow(name='', risk='low', desc='') {
+  const id = diseaseCount++;
+  const row = document.createElement('div');
+  row.className = 'disease-row'; row.id = 'drow_' + id;
+  row.innerHTML = `
+    <input class="form-input" placeholder="Disease name" value="${name}" id="dname_${id}" />
+    <select class="form-input" id="drisk_${id}">
+      <option value="low" ${risk==='low'?'selected':''}>🟢 Low</option>
+      <option value="medium" ${risk==='medium'?'selected':''}>🟡 Medium</option>
+      <option value="high" ${risk==='high'?'selected':''}>🔴 High</option>
+    </select>
+    <input class="form-input" placeholder="Short description" value="${desc}" id="ddesc_${id}" />
+    <button class="remove-btn" onclick="removeDiseaseRow(${id})" title="Remove">✕</button>`;
+  document.getElementById('diseaseRows').appendChild(row);
+}
+function removeDiseaseRow(id) { const el=document.getElementById('drow_'+id); if(el)el.remove(); }
+function collectDiseases() {
+  const diseases = [];
+  document.querySelectorAll('#diseaseRows .disease-row').forEach(row => {
+    const id = row.id.replace('drow_','');
+    const name = document.getElementById('dname_'+id)?.value.trim();
+    const risk = document.getElementById('drisk_'+id)?.value;
+    const desc = document.getElementById('ddesc_'+id)?.value.trim();
+    if (name) diseases.push({name, risk, desc});
+  });
+  return diseases;
+}
+
+/* ══════════════════════════════════════════════
+   IMAGE UPLOAD
+══════════════════════════════════════════════ */
+let uploadedImageDataUrl = null;
+let uploadedFileName = null;
+const dropZone = document.getElementById('dropZone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) processImage(file);
+});
+function handleFileSelect(e) { const file=e.target.files[0]; if(file)processImage(file); }
+function processImage(file) {
+  uploadedFileName = file.name;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    uploadedImageDataUrl = ev.target.result;
+    document.getElementById('dropContent').style.display='none';
+    document.getElementById('dropPreview').style.display='flex';
+    document.getElementById('previewImg').src=ev.target.result;
+    document.getElementById('previewName').textContent=file.name;
+    dropZone.classList.remove('drag-over');
+  };
+  reader.readAsDataURL(file);
+}
+
+/* ══════════════════════════════════════════════
+   MODAL OPEN / CLOSE
+══════════════════════════════════════════════ */
+function openAddFishModal() { resetForm(); document.getElementById('addFishModal').classList.add('open'); }
+function closeAddModal() { document.getElementById('addFishModal').classList.remove('open'); }
+function closeAddModalOutside(e) { if(e.target===document.getElementById('addFishModal'))closeAddModal(); }
+function resetForm() {
+  ['fishName','fishLatin','fishDesc','phMin','phMax','phIdeal','tempMin','tempMax','tempIdeal',
+   'turbLevel','turbNtu','turbNote','depthMin','depthMax','depthIdeal','fishClimate',
+   'fishSurvival','fishGrowth'].forEach(id => { const el=document.getElementById(id); if(el)el.value=''; });
+  document.getElementById('fishEmoji').value='🐟';
+  document.getElementById('fishStatus').value='Healthy';
+  uploadedImageDataUrl=null; uploadedFileName=null;
+  document.getElementById('dropContent').style.display='flex';
+  document.getElementById('dropPreview').style.display='none';
+  document.getElementById('previewImg').src='';
+  document.getElementById('fishImageInput').value='';
+  tags.food=[]; tags.spec=[]; renderTags('food'); renderTags('spec');
+  document.getElementById('diseaseRows').innerHTML=''; diseaseCount=0; addDiseaseRow();
+}
+
+/* ══════════════════════════════════════════════
+   SAVE FISH
+══════════════════════════════════════════════ */
+function saveNewFish() {
+  const name = document.getElementById('fishName').value.trim();
+  if (!name) {
+    document.getElementById('fishName').focus();
+    document.getElementById('fishName').style.borderColor='#ff6464';
+    setTimeout(()=>document.getElementById('fishName').style.borderColor='',1500);
+    return;
+  }
+  const statusVal = document.getElementById('fishStatus').value;
+  const statusClass = statusVal==='Healthy'?'badge-ok':statusVal==='Watch'?'badge-warn':'badge-danger';
+  const id = name.toLowerCase().replace(/\s+/g,'_')+'_'+Date.now();
+  const pillColors=['spec-green','spec-cyan','spec-amber'];
+  const pills = tags.spec.map((t,i)=>({label:t,cls:pillColors[i%3]}));
+  const imgSrc = uploadedFileName?`/static/assets/${uploadedFileName}`:null;
+  fishData[id] = {
+    name, latin:document.getElementById('fishLatin').value.trim()||'—',
+    emoji:document.getElementById('fishEmoji').value.trim()||'🐟',
+    status:statusVal, statusClass, imgSrc, imgDataUrl:uploadedImageDataUrl,
+    description:document.getElementById('fishDesc').value.trim()||'No description provided.',
+    ph:{min:parseFloat(document.getElementById('phMin').value)||0,max:parseFloat(document.getElementById('phMax').value)||0,ideal:document.getElementById('phIdeal').value.trim()||'—'},
+    temp:{min:document.getElementById('tempMin').value.trim()||'—',max:document.getElementById('tempMax').value.trim()||'—',ideal:document.getElementById('tempIdeal').value.trim()||'—'},
+    turbidity:{level:document.getElementById('turbLevel').value.trim()||'—',ntu:document.getElementById('turbNtu').value.trim()||'—',note:document.getElementById('turbNote').value.trim()||'—'},
+    depth:{min:document.getElementById('depthMin').value.trim()||'—',max:document.getElementById('depthMax').value.trim()||'—',ideal:document.getElementById('depthIdeal').value.trim()||'—'},
+    climate:document.getElementById('fishClimate').value.trim()||'—',
+    food:[...tags.food], diseases:collectDiseases(),
+    survival:document.getElementById('fishSurvival').value.trim()||'—',
+    growth:document.getElementById('fishGrowth').value.trim()||'—', pills
+  };
+  appendFishCard(id, fishData[id]);
+  updateCounts();
+  closeAddModal();
+  setTimeout(()=>{
+    const card=document.querySelector(`[data-fish-id="${id}"]`);
+    if(card){card.style.borderColor='#00daf3';card.style.boxShadow='0 0 30px rgba(0,218,243,0.25)';setTimeout(()=>{card.style.borderColor='';card.style.boxShadow='';},2000);}
+  },100);
+}
+
+/* ══════════════════════════════════════════════
+   RENDER FISH CARD
+══════════════════════════════════════════════ */
+const gradients = [
+  'linear-gradient(135deg,#0d1d2e,#0a1520)',
+  'linear-gradient(135deg,#1a1000,#120d00)',
+  'linear-gradient(135deg,#0a1a0d,#061208)',
+  'linear-gradient(135deg,#1a0a1a,#120012)',
+  'linear-gradient(135deg,#1a1500,#120f00)',
+  'linear-gradient(135deg,#0d2018,#091510)',
+  'linear-gradient(135deg,#001a1a,#001010)',
+  'linear-gradient(135deg,#0d0d1a,#08080f)',
+];
+let gradientIdx = 3;
+
+function appendFishCard(id, f) {
+  const grad = gradients[gradientIdx++ % gradients.length];
+  const imgHtml = f.imgDataUrl
+    ? `<img src="${f.imgDataUrl}" class="fish-image" alt="${f.name}" />`
+    : f.imgSrc
+      ? `<img src="${f.imgSrc}" class="fish-image" alt="${f.name}" />`
+      : `<span class="fish-emoji">${f.emoji}</span>`;
+  const pillsHtml = f.pills && f.pills.length
+    ? f.pills.map(p=>`<span class="spec-pill ${p.cls}">${p.label}</span>`).join('')
+    : `<span class="spec-pill spec-cyan">🐟 New Species</span>`;
+  const card = document.createElement('div');
+  card.className = 'fish-card';
+  card.setAttribute('data-fish-id', id);
+  card.setAttribute('onclick', `openDetail('${id}')`);
+  card.innerHTML = `
+    <div class="fish-card-img-zone" style="background:${grad};">
+      <div style="position:absolute;top:12px;right:12px;"><span class="badge ${f.statusClass}">${f.status}</span></div>
+      ${imgHtml}
+      <p class="click-hint mt-2">TAP TO VIEW PROFILE →</p>
+    </div>
+    <div class="fish-card-body">
+      <h3 style="font-size:18px;font-weight:800;margin-bottom:2px;">${f.name}</h3>
+      <p style="font-size:11px;color:#5a6a7a;font-style:italic;margin-bottom:14px;">${f.latin}</p>
+      <div style="flex-wrap:wrap;display:flex;margin-bottom:12px;">${pillsHtml}</div>
+      <button class="card-sensor-btn" onclick="event.stopPropagation();runCardSensorCheck('${id}',this)">🌡⚗️ Check Sensor Data</button>
+      <div class="card-temp-result" style="display:none;margin-top:8px;border-radius:10px;padding:10px 12px;font-size:11px;"></div>
+    </div>`;
+  document.getElementById('fishGrid').appendChild(card);
+}
+
+/* ══════════════════════════════════════════════
+   COUNTS
+══════════════════════════════════════════════ */
+function updateCounts() {
+  const n = Object.keys(fishData).length;
+  document.getElementById('speciesCountBadge').textContent = n + ' Types';
+  document.getElementById('headerCountBadge').textContent = n + ' SPECIES';
+}
+
+
+/* ══════════════════════════════════════════════
+   SHARED SENSOR READ — gets live or simulated values
+══════════════════════════════════════════════ */
+function readSensors() {
+  const savedTemp = localStorage.getItem('aqua_current_temp');
+  const savedPh   = localStorage.getItem('aqua_current_ph');
+  const tempLive  = savedTemp && !isNaN(parseFloat(savedTemp));
+  const phLive    = savedPh   && !isNaN(parseFloat(savedPh));
+  return {
+    temp    : tempLive ? parseFloat(savedTemp) : parseFloat((24 + Math.random()*10).toFixed(1)),
+    ph      : phLive   ? parseFloat(savedPh)   : parseFloat((6.0 + Math.random()*3).toFixed(2)),
+    tempSrc : tempLive ? '📡 Live dashboard' : '🎲 Simulated',
+    phSrc   : phLive   ? '📡 Live dashboard' : '🎲 Simulated',
+  };
+}
+
+function sensorResultHTML(f, sensors) {
+  const { temp, ph, tempSrc, phSrc } = sensors;
+  const tMin = parseFloat(f.temp.min) || 18;
+  const tMax = parseFloat(f.temp.max) || 35;
+  const pMin = parseFloat(f.ph.min)  || 6.0;
+  const pMax = parseFloat(f.ph.max)  || 9.0;
+
+  const tempOk = temp >= tMin && temp <= tMax;
+  const phOk   = ph   >= pMin && ph   <= pMax;
+  const allOk  = tempOk && phOk;
+
+  const tempIcon  = tempOk ? '✅' : '❌';
+  const phIcon    = phOk   ? '✅' : '❌';
+  const tempColor = tempOk ? '#6ce000' : '#ff6464';
+  const phColor   = phOk   ? '#6ce000' : '#ff6464';
+
+  const tempNote = tempOk
+    ? `${temp.toFixed(1)}°C — within range (${f.temp.min}–${f.temp.max})`
+    : temp > tMax
+      ? `${temp.toFixed(1)}°C — ${(temp-tMax).toFixed(1)}°C above max (${f.temp.max})`
+      : `${temp.toFixed(1)}°C — ${(tMin-temp).toFixed(1)}°C below min (${f.temp.min})`;
+
+  const phNote = phOk
+    ? `pH ${ph.toFixed(1)} — within range (${f.ph.min}–${f.ph.max})`
+    : ph > pMax
+      ? `pH ${ph.toFixed(1)} — ${(ph-pMax).toFixed(2)} above max (${f.ph.max})`
+      : `pH ${ph.toFixed(1)} — ${(pMin-ph).toFixed(2)} below min (${f.ph.min})`;
+
+  const overallBg     = allOk ? 'rgba(108,224,0,0.06)'    : 'rgba(255,100,100,0.06)';
+  const overallBorder = allOk ? 'rgba(108,224,0,0.25)'    : 'rgba(255,100,100,0.25)';
+  const overallColor  = allOk ? '#6ce000' : '#ff6464';
+  const overallLabel  = allOk ? '✅ Conditions Suitable' : '⚠ Conditions Not Fully Suitable';
+
+  return `
+    <div style="background:${overallBg};border:1px solid ${overallBorder};border-radius:12px;padding:14px;animation:popIn 0.3s ease both;">
+      <p style="font-size:13px;font-weight:800;color:${overallColor};margin:0 0 10px;">${overallLabel}</p>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <div style="display:flex;align-items:center;gap:8px;background:#0d1319;border-radius:8px;padding:8px 10px;">
+          <span style="font-size:16px;">${tempIcon}</span>
+          <div>
+            <span style="font-size:12px;font-weight:700;color:${tempColor};">🌡 Temperature: ${tempNote}</span>
+            <p style="font-size:10px;color:#3a4a5a;font-family:'JetBrains Mono',monospace;margin:2px 0 0;">${tempSrc} · Ideal: ${f.temp.ideal}</p>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;background:#0d1319;border-radius:8px;padding:8px 10px;">
+          <span style="font-size:16px;">${phIcon}</span>
+          <div>
+            <span style="font-size:12px;font-weight:700;color:${phColor};">⚗️ pH: ${phNote}</span>
+            <p style="font-size:10px;color:#3a4a5a;font-family:'JetBrains Mono',monospace;margin:2px 0 0;">${phSrc} · Ideal: ${f.ph.ideal}</p>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+/* ── DETAIL OVERLAY: combined sensor check ── */
+function runSensorCheck(fishId) {
+  const f = fishData[fishId];
+  if (!f) return;
+  const btn = document.getElementById('tempTestBtn');
+  const box = document.getElementById('tempTestResult');
+  btn.disabled = true;
+  btn.innerHTML = '⏳ Reading sensors...';
+  setTimeout(() => {
+    btn.disabled = false;
+    btn.innerHTML = '🌡⚗️ Check Sensor Data';
+    const sensors = readSensors();
+    box.style.display = 'block';
+    box.innerHTML = sensorResultHTML(f, sensors);
+  }, 800);
+}
+
+/* ── CARD-LEVEL: combined sensor check ── */
+function runCardSensorCheck(fishId, btn) {
+  const f = fishData[fishId];
+  if (!f) return;
+  const resultBox = btn.nextElementSibling;
+  btn.disabled = true;
+  btn.innerHTML = '⏳ Reading sensors...';
+  setTimeout(() => {
+    btn.disabled = false;
+    btn.innerHTML = '🌡⚗️ Check Sensor Data';
+    const sensors = readSensors();
+    resultBox.style.display = 'block';
+    resultBox.innerHTML = sensorResultHTML(f, sensors);
+  }, 700);
+}
+
+/* ══════════════════════════════════════════════
+   LEGACY: kept for any remaining references
+══════════════════════════════════════════════ */
+function runTempTest(fishId) { runSensorCheck(fishId); }
+function runCardTempTest(fishId, btn) { runCardSensorCheck(fishId, btn); }
+
+
+function openDetail(id) {
+  const f = fishData[id];
+  if (!f) { console.error('Fish not found:', id); return; }
+  const riskColor = { high:'#ff6464', medium:'#f59e0b', low:'#6ce000' };
+  const riskBg    = { high:'rgba(255,100,100,0.08)', medium:'rgba(245,158,11,0.08)', low:'rgba(108,224,0,0.08)' };
+  const imgHtml = f.imgDataUrl
+    ? `<img src="${f.imgDataUrl}" style="width:80px;height:60px;object-fit:contain;border-radius:10px;" />`
+    : f.imgSrc
+      ? `<img src="${f.imgSrc}" style="width:80px;height:60px;object-fit:contain;border-radius:10px;" />`
+      : `<span style="font-size:52px;">${f.emoji}</span>`;
+  const foodHtml = f.food && f.food.length
+    ? f.food.map(item=>`<span style="background:#0d1319;border:1px solid #1e2830;border-radius:8px;padding:5px 12px;font-size:11px;color:#dde3ec;">🍽 ${item}</span>`).join('')
+    : '<span style="font-size:11px;color:#3a4a5a;">No diet info provided</span>';
+  const diseasesHtml = f.diseases && f.diseases.length
+    ? f.diseases.map(d=>`
+      <div style="background:${riskBg[d.risk]||riskBg.low};border:1px solid ${riskColor[d.risk]||riskColor.low}30;border-radius:10px;padding:12px;margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <span style="font-size:12px;font-weight:700;">${d.name}</span>
+          <span style="font-size:9px;padding:2px 8px;border-radius:20px;background:${riskBg[d.risk]||riskBg.low};color:${riskColor[d.risk]||riskColor.low};border:1px solid ${riskColor[d.risk]||riskColor.low}40;font-family:'JetBrains Mono',monospace;text-transform:uppercase;">${d.risk} risk</span>
+        </div>
+        <p style="font-size:11px;color:#5a6a7a;margin:0;">${d.desc||''}</p>
+      </div>`).join('')
+    : '<span style="font-size:11px;color:#3a4a5a;">No disease data provided</span>';
+
+  document.getElementById('detailContent').innerHTML = `
+    <div style="display:flex;align-items:center;gap:16px;margin-bottom:24px;">
+      ${imgHtml}
+      <div>
+        <h2 style="font-size:24px;font-weight:800;margin:0 0 4px;">${f.name}</h2>
+        <p style="font-size:12px;color:#5a6a7a;font-style:italic;margin:0 0 8px;">${f.latin}</p>
+        <span class="badge ${f.statusClass}">${f.status}</span>
+      </div>
+    </div>
+    <p style="font-size:13px;color:#8a9aaa;line-height:1.7;margin-bottom:20px;">${f.description}</p>
+    <div class="detail-section">
+      <p style="font-size:10px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;letter-spacing:0.1em;margin-bottom:12px;">WATER REQUIREMENTS</p>
+      <div class="info-row"><span style="font-size:12px;color:#5a6a7a;">pH Level</span>
+        <div style="text-align:right;"><span style="font-size:13px;font-weight:700;color:#00daf3;">${f.ph.ideal}</span><span style="font-size:10px;color:#3a4a5a;font-family:'JetBrains Mono',monospace;margin-left:8px;">(range ${f.ph.min}–${f.ph.max})</span></div></div>
+      <div class="info-row"><span style="font-size:12px;color:#5a6a7a;">Temperature</span>
+        <span style="font-size:13px;font-weight:700;color:#f59e0b;">${f.temp.ideal} <span style="font-size:10px;color:#3a4a5a;">(${f.temp.min}–${f.temp.max})</span></span></div>
+      <div class="info-row"><span style="font-size:12px;color:#5a6a7a;">Turbidity</span>
+        <div style="text-align:right;"><span style="font-size:13px;font-weight:700;color:#6ce000;">${f.turbidity.level}</span><br><span style="font-size:10px;color:#5a6a7a;">${f.turbidity.ntu} · ${f.turbidity.note}</span></div></div>
+      <div class="info-row"><span style="font-size:12px;color:#5a6a7a;">Depth Range</span>
+        <span style="font-size:13px;font-weight:700;color:#00daf3;">${f.depth.ideal} <span style="font-size:10px;color:#3a4a5a;">(min ${f.depth.min})</span></span></div>
+      <div class="info-row"><span style="font-size:12px;color:#5a6a7a;">Climate</span>
+        <span style="font-size:11px;color:#dde3ec;text-align:right;max-width:280px;">${f.climate}</span></div>
+    </div>
+    <div class="detail-section">
+      <p style="font-size:10px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;letter-spacing:0.1em;margin-bottom:10px;">DIET & FEEDING</p>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">${foodHtml}</div>
+    </div>
+    <div class="detail-section">
+      <p style="font-size:10px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;letter-spacing:0.1em;margin-bottom:10px;">POSSIBLE DISEASES</p>
+      ${diseasesHtml}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:0;">
+      <div class="detail-section" style="margin-bottom:0;">
+        <p style="font-size:9px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;letter-spacing:0.08em;margin-bottom:6px;">SURVIVAL RATE</p>
+        <p style="font-size:22px;font-weight:800;color:#6ce000;">${f.survival}</p>
+      </div>
+      <div class="detail-section" style="margin-bottom:0;">
+        <p style="font-size:9px;color:#5a6a7a;font-family:'JetBrains Mono',monospace;letter-spacing:0.08em;margin-bottom:6px;">GROWTH RATE</p>
+        <p style="font-size:22px;font-weight:800;color:#00daf3;">${f.growth}</p>
+      </div>
+    </div>
+    <!-- ── SENSOR CHECK ── -->
+    <div style="margin-top:14px;">
+      <button id="tempTestBtn" class="temp-test-btn" onclick="runSensorCheck('${id}')">🌡⚗️ Check Sensor Data</button>
+      <div id="tempTestResult" class="temp-result-box" style="display:none;"></div>
+    </div>`;
+
+  document.getElementById('detailOverlay').classList.add('open');
+}
+
+function closeDetail(e) {
+  if (e.target === document.getElementById('detailOverlay')) closeOverlay();
+}
+function closeOverlay() {
+  document.getElementById('detailOverlay').classList.remove('open');
+}
+document.addEventListener('keydown', e => { if(e.key==='Escape'){closeOverlay();closeAddModal();} });
+
+/* ══════════════════════════════════════════════
+   RENDER ALL CATALOGUE FISH ON PAGE LOAD
+══════════════════════════════════════════════ */
+window.addEventListener('DOMContentLoaded', () => {
+  Object.keys(catalogueFish).forEach(id => appendFishCard(id, catalogueFish[id]));
+  updateCounts();
+  addDiseaseRow();
+});
+</script>
+
+<!-- ═══════════════════════════════════════════════
+     AQUARIUM OVERLAY for list.html
+═══════════════════════════════════════════════ -->
+<div id="aq-overlay-l" style="position:fixed;inset:0;pointer-events:none;z-index:50;overflow:hidden;"></div>
+
+<script>
+(function(){
+  const overlay = document.getElementById('aq-overlay-l');
+
+  /* ── small fish SVG factory ── */
+  function fishSVG(type, w, h) {
+    const id = 'f'+Math.random().toString(36).slice(2,7);
+    if (type === 'cyan') return `<svg width="${w}" height="${h}" viewBox="0 0 36 20" xmlns="http://www.w3.org/2000/svg">
+      <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#00daf3"/><stop offset="100%" stop-color="#0055cc"/></linearGradient></defs>
+      <polygon points="0,10 9,3 9,17" fill="#0055cc" opacity="0.9"/>
+      <ellipse cx="22" cy="10" rx="13" ry="7" fill="url(#${id})"/>
+      <path d="M14,3 Q20,0 26,3" stroke="#00daf3" stroke-width="1.2" fill="none" opacity="0.8"/>
+      <ellipse cx="28" cy="8" rx="2.5" ry="2.5" fill="#fff" opacity="0.9"/>
+      <circle cx="28" cy="8" r="1.2" fill="#001033"/>
+      <circle cx="28.5" cy="7.5" r="0.4" fill="#fff"/>
+    </svg>`;
+    if (type === 'gold') return `<svg width="${w}" height="${h}" viewBox="0 0 34 19" xmlns="http://www.w3.org/2000/svg">
+      <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#fbbf24"/><stop offset="100%" stop-color="#b45309"/></linearGradient></defs>
+      <polygon points="0,9 9,2 9,16" fill="#92400e" opacity="0.9"/>
+      <ellipse cx="21" cy="9" rx="12" ry="7" fill="url(#${id})"/>
+      <path d="M13,3 Q19,0 24,3" stroke="#fde68a" stroke-width="1" fill="none" opacity="0.8"/>
+      <ellipse cx="26" cy="7" rx="2.2" ry="2.2" fill="#fff" opacity="0.9"/>
+      <circle cx="26" cy="7" r="1" fill="#221100"/>
+      <circle cx="26.4" cy="6.6" r="0.4" fill="#fff"/>
+    </svg>`;
+    if (type === 'green') return `<svg width="${w}" height="${h}" viewBox="0 0 34 19" xmlns="http://www.w3.org/2000/svg">
+      <defs><linearGradient id="${id}" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#14532d"/><stop offset="100%" stop-color="#22c55e"/></linearGradient></defs>
+      <polygon points="0,9 9,2 9,16" fill="#166534" opacity="0.9"/>
+      <ellipse cx="21" cy="9" rx="12" ry="7" fill="url(#${id})"/>
+      <path d="M13,3 Q19,0 24,3" stroke="#4ade80" stroke-width="1" fill="none" opacity="0.8"/>
+      <ellipse cx="26" cy="7" rx="2.2" ry="2.2" fill="#fff" opacity="0.9"/>
+      <circle cx="26" cy="7" r="1" fill="#001a09"/>
+      <circle cx="26.4" cy="6.6" r="0.4" fill="#fff"/>
+    </svg>`;
+    if (type === 'purple') return `<svg width="${w}" height="${h}" viewBox="0 0 32 18" xmlns="http://www.w3.org/2000/svg">
+      <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#c084fc"/><stop offset="100%" stop-color="#6d28d9"/></linearGradient></defs>
+      <polygon points="0,9 8,2 8,16" fill="#5b21b6" opacity="0.9"/>
+      <ellipse cx="20" cy="9" rx="11" ry="6.5" fill="url(#${id})"/>
+      <path d="M12,3 Q18,0 23,3" stroke="#c084fc" stroke-width="1" fill="none" opacity="0.8"/>
+      <ellipse cx="24" cy="7" rx="2" ry="2" fill="#fff" opacity="0.9"/>
+      <circle cx="24" cy="7" r="1" fill="#1a0033"/>
+      <circle cx="24.4" cy="6.6" r="0.4" fill="#fff"/>
+    </svg>`;
+    return '';
+  }
+
+  /* ── small plant SVG factory ── */
+  function plantSVG(variant, h) {
+    const colors = ['#2d8a3e','#1e6b2e','#3aaa50','#108040','#0d7a5a'];
+    const c1 = colors[variant % colors.length];
+    const c2 = colors[(variant+2) % colors.length];
+    if (variant % 3 === 0) {
+      return `<svg width="18" height="${h}" viewBox="0 0 18 ${h}" xmlns="http://www.w3.org/2000/svg">
+        <path d="M9,${h} C9,${h*0.75} ${variant%2?3:14},${h*0.6} ${variant%2?6:12},${h*0.42} C${variant%2?12:6},${h*0.25} ${variant%2?16:4},${h*0.18} 9,3" stroke="${c1}" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <ellipse cx="9" cy="3" rx="5" ry="3" fill="${c2}" opacity="0.85"/>
+        <ellipse cx="${variant%2?3:14}" cy="${h*0.38}" rx="6" ry="3" fill="${c1}" transform="rotate(${variant%2?-25:25} ${variant%2?3:14} ${h*0.38})" opacity="0.75"/>
+      </svg>`;
+    } else if (variant % 3 === 1) {
+      const r = h * 0.28;
+      return `<svg width="${r*2.4}" height="${h}" viewBox="0 0 ${r*2.4} ${h}" xmlns="http://www.w3.org/2000/svg">
+        <path d="M${r*1.2},${h} L${r*1.2},${h*0.55}" stroke="${c1}" stroke-width="2.5" stroke-linecap="round"/>
+        <circle cx="${r*1.2}" cy="${h*0.45}" r="${r}" fill="${c2}" opacity="0.68"/>
+        <circle cx="${r*0.55}" cy="${h*0.56}" r="${r*0.7}" fill="${c1}" opacity="0.6"/>
+        <circle cx="${r*1.85}" cy="${h*0.52}" r="${r*0.75}" fill="${c2}" opacity="0.55"/>
+      </svg>`;
+    } else {
+      return `<svg width="28" height="${h}" viewBox="0 0 28 ${h}" xmlns="http://www.w3.org/2000/svg">
+        <path d="M14,${h} C14,${h*0.7} 11,${h*0.5} 14,${h*0.2}" stroke="${c1}" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <path d="M14,${h*0.72} C6,${h*0.62} 1,${h*0.52} 6,${h*0.46}" stroke="${c1}" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+        <path d="M14,${h*0.55} C22,${h*0.45} 27,${h*0.36} 20,${h*0.3}" stroke="${c2}" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+        <circle cx="14" cy="${h*0.18}" r="4" fill="${c2}" opacity="0.85"/>
+        <circle cx="6"  cy="${h*0.44}" r="3" fill="${c1}" opacity="0.78"/>
+        <circle cx="21" cy="${h*0.28}" r="3" fill="${c2}" opacity="0.75"/>
+      </svg>`;
+    }
+  }
+
+  /* ── 3 subtle swimming fish ── */
+  const fishDefs = [
+    { type:'cyan',   w:30, h:17, top:'22%', dur:22, delay:0,   dir:'r', bob:'bob-up-l',  op:0.55 },
+    { type:'gold',   w:28, h:16, top:'58%', dur:17, delay:-6,  dir:'l', bob:'bob-dn-l',  op:0.50 },
+    { type:'purple', w:26, h:15, top:'75%', dur:26, delay:-12, dir:'r', bob:'bob-up-l',  op:0.45 },
+  ];
+
+  fishDefs.forEach(f => {
+    const outer = document.createElement('div');
+    outer.className = 'swim-fish-l';
+    const isLeft = f.dir === 'l';
+    outer.style.cssText = `top:${f.top};opacity:${f.op};animation:${isLeft?'swim-l-l':'swim-r-l'} ${f.dur}s linear ${f.delay}s infinite,${f.bob} ${(f.dur*0.4).toFixed(1)}s ease-in-out ${f.delay}s infinite;`;
+    const inner = document.createElement('div');
+    inner.style.cssText = `display:inline-block;${isLeft?'transform:scaleX(-1);':''}`;
+    inner.innerHTML = fishSVG(f.type, f.w, f.h);
+    outer.appendChild(inner);
+    overlay.appendChild(outer);
+  });
+
+  /* ── cursor fish (small) ── */
+  const cf = document.createElement('div');
+  cf.id = 'cursor-fish-l';
+  cf.innerHTML = `<svg width="34" height="20" viewBox="0 0 34 20" xmlns="http://www.w3.org/2000/svg">
+    <defs><linearGradient id="cfl-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#00daf3"/><stop offset="100%" stop-color="#0055cc"/></linearGradient></defs>
+    <polygon points="0,10 8,3 8,17" fill="#0055cc" opacity="0.9"/>
+    <ellipse cx="20" cy="10" rx="13" ry="8" fill="url(#cfl-g)"/>
+    <path d="M13,3 Q19,0 24,3" stroke="#00daf3" stroke-width="1.2" fill="none" opacity="0.85"/>
+    <ellipse cx="27" cy="8" rx="2.5" ry="2.5" fill="#fff" opacity="0.95"/>
+    <circle cx="27" cy="8" r="1.3" fill="#001033"/>
+    <circle cx="27.5" cy="7.5" r="0.5" fill="#fff"/>
+    <path d="M32,10 Q33,11 32,12" stroke="#fff" stroke-width="0.8" fill="none" opacity="0.6"/>
+  </svg>`;
+  cf.style.cssText = 'left:-200px;top:-200px;transform:translate(-50%,-55%);';
+  document.body.appendChild(cf);
+
+  let mouseX=-300, mouseY=-300, cfX=-300, cfY=-300, facingLeft=false;
+  document.addEventListener('mousemove', e => { mouseX=e.clientX; mouseY=e.clientY; });
+  function animateCF() {
+    cfX += (mouseX - cfX) * 0.08;
+    cfY += (mouseY - cfY) * 0.08;
+    const cfSvg = cf.querySelector('svg');
+    const dx = mouseX - cfX;
+    if (Math.abs(dx) > 2) {
+      if (dx < 0 && !facingLeft) { facingLeft=true; cfSvg.style.transform='scaleX(-1)'; }
+      else if (dx > 0 && facingLeft) { facingLeft=false; cfSvg.style.transform='scaleX(1)'; }
+    }
+    const dy = mouseY - cfY;
+    const tilt = Math.max(-18, Math.min(18, dy * 0.25));
+    cf.style.left = cfX+'px'; cf.style.top = cfY+'px';
+    cf.style.transform = `translate(-50%,-55%) rotate(${tilt}deg)`;
+    requestAnimationFrame(animateCF);
+  }
+  animateCF();
+
+  /* ── 5 sparse plants at bottom ── */
+  const plantPos = [
+    { left:'5%',  h:90,  v:0, anim:'sway-l2', dur:4.0, delay:0   },
+    { left:'20%', h:70,  v:1, anim:'sway-r2', dur:4.8, delay:1.2 },
+    { left:'45%', h:80,  v:2, anim:'sway-g2', dur:5.5, delay:2.5 },
+    { left:'70%', h:75,  v:0, anim:'sway-r2', dur:4.2, delay:0.8 },
+    { left:'90%', h:85,  v:1, anim:'sway-l2', dur:5.0, delay:3.0 },
+  ];
+  plantPos.forEach(p => {
+    const el = document.createElement('div');
+    el.className = 'aq-plant-l';
+    el.style.left = p.left;
+    el.style.animation = `${p.anim} ${p.dur}s ease-in-out ${p.delay}s infinite`;
+    el.innerHTML = plantSVG(p.v, p.h);
+    overlay.appendChild(el);
+  });
+
+  /* ── sparse bubbles ── */
+  function spawnBubble() {
+    const b = document.createElement('div');
+    b.className = 'aq-bubble-l';
+    const s = 4 + Math.random()*8;
+    b.style.cssText = `width:${s}px;height:${s}px;left:${(Math.random()*92+2).toFixed(1)}%;bottom:${(Math.random()*12).toFixed(1)}%;animation:bubble-rise-l ${8+Math.random()*9}s ease-in forwards;`;
+    overlay.appendChild(b);
+    setTimeout(()=>b.remove(), 17000);
+  }
+  function nextBubble() { spawnBubble(); setTimeout(nextBubble, 1200+Math.random()*1800); }
+  nextBubble();
+  /* small cursor-fish bubble trail */
+  setInterval(()=>{ if(cfX<0) return; const b=document.createElement('div'); b.className='aq-bubble-l'; const s=3+Math.random()*4; b.style.cssText=`width:${s}px;height:${s}px;left:${cfX+(facingLeft?24:-24)}px;top:${cfY+4}px;animation:bubble-rise-l ${6+Math.random()*5}s ease-in forwards;`; overlay.appendChild(b); setTimeout(()=>b.remove(),11000); }, 1200);
+
+})();
+</script>
+</body>
+</html>
